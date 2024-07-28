@@ -1,15 +1,27 @@
 #include <iostream>
 #include <vector>
 #include <queue>
+#include <algorithm>
 using namespace std;
+
+typedef struct Edge {
+    int src;
+    int dest;
+    int weight;
+}Edge;
+
 class Graph {
-    private:
+    protected:
         int V;
         int E;
-        vector<vector<int>> adj;
+        vector<vector<Edge>> adj;
     public:
         Graph(): V(0), E(0) {}
-        void initGraph();
-        void addEdge(int u, int v, int w);
-        void removeEdge(int u, int v);
+        virtual void init();
+        virtual void addEdge(int u, int v, int w);
+        virtual void removeEdge(int u, int v);
+        int getVerticesNumber() const { return V; }
+        vector<vector<Edge>> getAdj() const { return adj; }
+        vector<vector<int>> getAdjMatrix() const;
+        
 };
