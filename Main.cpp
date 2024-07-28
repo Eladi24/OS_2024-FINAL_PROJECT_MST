@@ -39,6 +39,12 @@ void handleCommands(Graph* g, MSTFactory& factory, Tree* mst)
                 cerr << "Graph not initialized" << endl;
                 continue;
             }
+            if (mst != nullptr)
+            {
+                delete mst;
+                mst = nullptr;
+            }
+            
             factory.setStrategy(new PrimStrategy());
             mst = factory.createMST(*g);
             cout << "MST created using Prim's algorithm." << endl;
@@ -53,12 +59,19 @@ void handleCommands(Graph* g, MSTFactory& factory, Tree* mst)
                 cerr << "Graph not initialized" << endl;
                 continue;
             }
+            if (mst != nullptr)
+            {
+                delete mst;
+                mst = nullptr;
+            }
+
             factory.setStrategy(new KruskalStrategy());
             mst = factory.createMST(*g);
             cout << "MST created using Kruskal's algorithm." << endl;
             mst->printMST();
         
         }
+
         else if (cmd == "MSTweight")
         {
             if (mst == nullptr)
@@ -71,6 +84,12 @@ void handleCommands(Graph* g, MSTFactory& factory, Tree* mst)
 
         else if (cmd == "Shortestpath")
         {
+            if (mst == nullptr)
+            {
+                cerr << "MST not created" << endl;
+                continue;
+            }
+
             int src, dest;
             if (!(ss >> src >> dest) || src < 0 || src >= g->getVerticesNumber() || dest < 0 || dest >= g->getVerticesNumber())
             {
@@ -82,6 +101,12 @@ void handleCommands(Graph* g, MSTFactory& factory, Tree* mst)
         }
         else if (cmd == "Longestpath")
         {
+            if (mst == nullptr)
+            {
+                cerr << "MST not created" << endl;
+                continue;
+            }
+
             int src, dest;
             if (!(ss >> src >> dest) || src < 0 || src >= g->getVerticesNumber() || dest < 0 || dest >= g->getVerticesNumber())
             {
@@ -93,6 +118,12 @@ void handleCommands(Graph* g, MSTFactory& factory, Tree* mst)
         }
         else if (cmd == "Avaragedistance")
         {
+            if (mst == nullptr)
+            {
+                cerr << "MST not created" << endl;
+                continue;
+            }
+
             cout << "Avarage distance is " << mst->averageDistanceEdges() << endl;
         }
         else if (cmd == "Exit")
