@@ -3,10 +3,11 @@
 void Tree::init(vector<Edge> edges)
 {
     V = edges.size() + 1;
+    cout << "V: " << V << endl;
     E = 0;
     adj.resize(V);
-
-    for (Edge e : edges)
+    
+    for (const Edge& e : edges)
     {
         addEdge(e.src, e.dest, e.weight);
     }
@@ -17,14 +18,14 @@ void Tree::init(vector<Edge> edges)
 int Tree::totalWeight()
 {
     int total = 0;
-    for (int i = 0; i < V / 2; i++)
+    for (int i = 0; i < V; i++)
     {
         for (Edge e : adj[i])
         {
             total += e.weight;
         }
     }
-    return total;
+    return total / 2;
 }
 
 vector<int> Tree::dijkstra(int src, vector<int> &parentTrack)
@@ -35,28 +36,28 @@ vector<int> Tree::dijkstra(int src, vector<int> &parentTrack)
     vector<int> dist(V, INT_MAX);
     // Insert source itself in priority queue and initialize its distance as 0.
     pq.push({0, src});
-    dist[src] = 0;
-    parentTrack[src] = -1;
+    dist[src - 1] = 0;
+    parentTrack[src - 1] = -1;
 
     // Looping till priority queue becomes empty (or all distances are not finalized)
     while (!pq.empty())
     {
         // The first vertex in pair is the minimum distance vertex, extract it from priority queue.
-        int u = pq.top().second;
+        int u = pq.top().second - 1; // Convert to 0-based index
         pq.pop();
 
         // Loop through all adjacent of u
         for (Edge e : adj[u])
         {
-            int v = e.dest;
+            int v = e.dest - 1; // Convert to 0-based index
             int weight = e.weight;
             // If there is a shorter path to v through u.
             if (dist[v] > dist[u] + weight)
             {
                 // Updating distance of v
                 dist[v] = dist[u] + weight;
-                pq.push({dist[v], v});
-                parentTrack[v] = u;
+                pq.push({dist[v], v + 1}); // Store as 1-based index
+                parentTrack[v] = u + 1; // Store parent as 1-based index
             }
         }
     }
@@ -65,43 +66,52 @@ vector<int> Tree::dijkstra(int src, vector<int> &parentTrack)
 
 void Tree::dfs(int node, int parent, vector<int> &dist, vector<int> &parentTrack)
 {
-    for (Edge e : adj[node])
+    for (Edge e : adj[node - 1])
     {
         if (e.dest != parent)
         {
-            dist[e.dest] = dist[node] + e.weight;
-            parentTrack[e.dest] = node;
+            dist[e.dest - 1] = dist[node - 1] + e.weight;
+            parentTrack[e.dest - 1] = node;
             dfs(e.dest, node, dist, parentTrack);
         }
     }
 }
 
+
 string Tree::reconstructPath(int src, int dest, const vector<int> &parentTrack)
 {
-    if (parentTrack[dest] == -1)
+    int dest_index = dest - 1; // Convert to 0-based index
+    if (parentTrack[dest_index] == -1)
     {
         return "No path";
     }
 
     vector<int> path;
-    for (int i = dest; i != -1; i = parentTrack[i])
+    for (int i = dest_index; i != -1; i = parentTrack[i] - 1)
     {
-        path.push_back(i);
+        path.push_back(i + 1); // Store as 1-based index
+        if (i == src - 1) break;  // Stop if we have reached the source
     }
+
+    if (path.back() != src)
+    {
+        return "No path";
+    }
+
     reverse(path.begin(), path.end());
     string result;
 
-    for (int i = 0; i < path.size(); i++)
+    for (size_t i = 0; i < path.size(); i++)
     {
         result += to_string(path[i]);
-        if (i > 0)
+        if (i < path.size() - 1)
         {
             result += " -> ";
         }
-        result += to_string(path[i]);
     }
     return result;
 }
+
 
 void Tree::floydWarshall()
 {
@@ -164,7 +174,7 @@ string Tree::longestPath(int u, int v)
     // Parent vector to store the parent of each node in the path
     vector<int> parentTrack(V, -1);
     // Distance of the source node from itself is 0
-    dist[u] = 0;
+    dist[u - 1] = 0;
     // Run DFS from the source node
     dfs(u, -1, dist, parentTrack);
     return reconstructPath(u, v, parentTrack);
@@ -172,9 +182,9 @@ string Tree::longestPath(int u, int v)
 
 void Tree::addEdge(int u, int v, int w)
 {
-    if (u < 0 || u >= V || v < 0 || v >= V)
+    if (u < 0 || u > V || v < 0 || v > V)
     {
-        cerr << "Invalid edge, vertices must be between 0 and " << V - 1 << endl;
+        cerr << "Invalid edge, vertices must be between 1 and " << V << endl;
         exit(1);
     }
 
@@ -190,12 +200,36 @@ void Tree::addEdge(int u, int v, int w)
         exit(1);
     }
 
-    adj[u].push_back({u, v, w});
-    adj[v].push_back({v, u, w});
+    adj[u - 1].push_back({u, v, w});
+    adj[v - 1].push_back({v, u, w});
     E++;
 }
 
 void Tree::removeEdge(int u, int v)
 {
     throw runtime_error("Removing edges is not allowed in a tree");
+}
+
+void Tree::printMST()
+{
+    vector<bool> visited(V, false);
+    printMST(0, -1, 0, visited);
+}
+
+void Tree::printMST(int node, int parent, int level, vector<bool> &visited)
+{
+    visited[node] = true;
+
+    for (auto& edge : adj[node])
+    {
+        if (!visited[edge.dest - 1])
+        {
+            for (int i = 0; i < level; i++)
+            {
+                cout << "  ";
+            }
+            cout << node + 1 << " - " << edge.dest << " (" << edge.weight << ")" << endl;
+            printMST(edge.dest - 1, node, level + 1, visited);
+        }
+    }
 }

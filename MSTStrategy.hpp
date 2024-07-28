@@ -1,3 +1,5 @@
+#ifndef MSTSTRATEGY_HPP
+#define MSTSTRATEGY_HPP
 #include <iostream>
 #include "Tree.hpp"
 
@@ -8,6 +10,7 @@
 */
 class MSTStrategy {
     public:
+        virtual ~MSTStrategy() = default;
         /*
         * @brief This method will find the minimum spanning tree of the graph g.
         * It is a pure virtual method, so it must be implemented by the concrete classes.
@@ -82,3 +85,5 @@ class KruskalStrategy: public MSTStrategy {
         */
         vector<Edge> findMST(const Graph& g) override;
 };
+
+#endif

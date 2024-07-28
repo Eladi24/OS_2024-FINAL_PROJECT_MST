@@ -2,20 +2,14 @@
 
 void Graph::init()
 {
-    cin >> V >> E;
-    if (V <= 0 || E <= 0)
-    {
-        cerr << "Invalid number of vertices or edges" << endl;
-        exit(1);
-    }
-
+    
     adj.resize(V);
 
     for (int i = 0; i < E; i++)
     {
         int u, v, w;
-        cin >> u >> v >> w;
-        if (u < 0 || u >= V || v < 0 || v >= V)
+        
+        if (!(cin >> u >> v >> w) || u < 0 || u > V || v < 0 || v > V)
         {
             cerr << "Invalid edge" << endl;
             exit(1);

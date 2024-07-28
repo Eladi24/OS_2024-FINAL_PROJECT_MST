@@ -1,3 +1,5 @@
+#ifndef MSTFACTORY_HPP
+#define MSTFACTORY_HPP
 #include "MSTStrategy.hpp"
 
 class MSTFactory
@@ -21,3 +23,5 @@ class MSTFactory
         */
         Tree* createMST(Graph& g);
 };
+
+#endif

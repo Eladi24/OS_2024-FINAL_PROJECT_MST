@@ -1,7 +1,10 @@
+#ifndef GRAPH_HPP
+#define GRAPH_HPP
 #include <iostream>
 #include <vector>
 #include <queue>
 #include <algorithm>
+#include <sstream>
 using namespace std;
 
 typedef struct Edge {
@@ -17,11 +20,15 @@ class Graph {
         vector<vector<Edge>> adj;
     public:
         Graph(): V(0), E(0) {}
+        Graph(int V, int E): V(V), E(E) { init(); }
+        virtual ~Graph() = default;
         virtual void init();
         virtual void addEdge(int u, int v, int w);
         virtual void removeEdge(int u, int v);
         int getVerticesNumber() const { return V; }
-        vector<vector<Edge>> getAdj() const { return adj; }
+        const vector<vector<Edge>>& getAdj() const { return adj; }
         vector<vector<int>> getAdjMatrix() const;
         
 };
+
+#endif

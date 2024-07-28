@@ -44,5 +44,12 @@
         "stdexcept": "cpp",
         "streambuf": "cpp",
         "typeinfo": "cpp"
-    }
+    },
+    "makefile.launchConfigurations": [
+        {
+            "cwd": "/home/eladubuntu/Git Projects/OS_2024-FINAL_PROJECT_MST",
+            "binaryPath": "/home/eladubuntu/Git Projects/OS_2024-FINAL_PROJECT_MST/main",
+            "binaryArgs": []
+        }
+    ]
 }

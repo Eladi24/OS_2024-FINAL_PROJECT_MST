@@ -2,7 +2,7 @@
 
 int PrimStrategy::minKey(vector<int> key, vector<bool> mstSet, int V)
 {
-    int min = INT_MAX, min_index;
+    int min = INT_MAX, min_index = -1;
     for (int v = 0; v < V; v++)
     {
         if (mstSet[v] == false && key[v] < min)
@@ -19,7 +19,7 @@ vector<Edge> PrimStrategy::findMST(const Graph& g)
     int V = g.getVerticesNumber();
     vector<Edge> result;
     // Array to store the constructed MST
-    vector<int> parent(V);
+    vector<int> parent(V, -1);
     // Key values used to pick minimum weight edge in cut
     vector<int> key(V, INT_MAX);
     // To represent set of vertices not yet included in MST
@@ -41,9 +41,9 @@ vector<Edge> PrimStrategy::findMST(const Graph& g)
 
         // Update key value and parent index of the adjacent vertices of the picked vertex.
         // Consider only those vertices which are not yet included in MST
-        for (Edge e : g.getAdj()[u])
+        for (const Edge& e : g.getAdj()[u])
         {
-            int v = e.dest;
+            int v = e.dest - 1;
             int weight = e.weight;
             if (mstSet[v] == false && weight < key[v])
             {
@@ -55,7 +55,7 @@ vector<Edge> PrimStrategy::findMST(const Graph& g)
 
     for (int i = 1; i < V; i++)
     {
-        result.push_back({parent[i], i, key[i]});
+        result.push_back({parent[i] + 1, i + 1, key[i]});
     }
 
     return result;
@@ -87,8 +87,8 @@ void DSU::unite(int x, int y)
         }
         else
         {
-            parent[s1] = s2;
-            rank[s2]++;
+            parent[s2] = s1;
+            rank[s1]++;
         }
     }
 }
@@ -98,7 +98,7 @@ vector<Edge> KruskalStrategy::findMST(const Graph& g) {
     int V = g.getVerticesNumber();
     vector<Edge> result;
     int e = 0; // Number of edges in the MST
-    int i = 0; // Index used for sorted edges
+    size_t i = 0; // Index used for sorted edges
 
     // Get all edges from the graph
     vector<Edge> edges;
@@ -121,8 +121,8 @@ vector<Edge> KruskalStrategy::findMST(const Graph& g) {
     while (e < V - 1 && i < edges.size()) {
         Edge next_edge = edges[i++];
 
-        int x = dsu.find(next_edge.src);
-        int y = dsu.find(next_edge.dest);
+        int x = dsu.find(next_edge.src - 1);
+        int y = dsu.find(next_edge.dest - 1);
 
         if (x != y) {
             result.push_back(next_edge);

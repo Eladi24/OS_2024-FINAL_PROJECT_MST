@@ -2,6 +2,10 @@
 
 void MSTFactory::setStrategy(MSTStrategy* strategy)
 {
+    if (this->strategy != nullptr)
+    {
+        delete this->strategy;
+    }
     this->strategy = strategy;
 }
 
