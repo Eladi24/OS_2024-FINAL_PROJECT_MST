@@ -14,16 +14,16 @@ class ActiveObject
         queue<function<void()>> _tasks;
         mutex _mx;
         condition_variable _cv;
-        thread _thread;
+        thread _worker;
         bool _done;
         void run();
     public:
-        ActiveObject(): _done(false), _thread(&ActiveObject::run, this) {}
+        ActiveObject(): _done(false), _worker(&ActiveObject::run, this) {}
         ~ActiveObject();
-        void start();
-        void stop();
+        
         template<class F>
-        void enqueue(F f);
+        void enqueue(F task);
+        
 
 };
 
