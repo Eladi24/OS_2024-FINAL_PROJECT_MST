@@ -15,7 +15,7 @@ class Tree: public Graph
         string reconstructPath(int src, int dest, const vector<int>& parentTrack);
         void floydWarshall();
         void init(vector<Edge> edges);
-        void printMST(int node, int parent, int level, vector<bool>& visited);
+        string printMST(int node, int parent, int level, vector<bool>& visited);
 
     public:    
         Tree(): Graph() {}
@@ -27,7 +27,7 @@ class Tree: public Graph
         string longestPath(int u, int v);
         void addEdge(int u, int v, int w) override;
         void removeEdge(int u, int v) override;
-        void printMST();
+        string printMST();
 
 };
 

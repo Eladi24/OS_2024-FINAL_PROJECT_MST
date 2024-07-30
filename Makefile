@@ -12,9 +12,12 @@ OBJ = $(SRC:.cpp=.o)
 EXEC = main
 
 # Compile
-all: $(EXEC)
+all: $(EXEC) PipelineServer
 
 $(EXEC): $(OBJ)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+PipelineServer: $(OBJ)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 # Dependencies
@@ -33,4 +36,4 @@ rebuild: clean all
 
 # Clean
 clean:
-	rm -f $(OBJ) $(EXEC) valgrind-out.txt
+	rm -f $(OBJ) $(EXEC) PipelineServer valgrind-out.txt

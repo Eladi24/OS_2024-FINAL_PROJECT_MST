@@ -9,9 +9,8 @@ void MSTFactory::setStrategy(MSTStrategy* strategy)
     this->strategy = strategy;
 }
 
-Tree* MSTFactory::createMST(Graph& g)
+unique_ptr<Tree> MSTFactory::createMST(unique_ptr<Graph>& g)
 {
-    vector<Edge> edges = strategy->findMST(g);
-    Tree* mst = new Tree(edges);
-    return mst;
+    vector<Edge> edges = strategy->findMST(*g);
+    return make_unique<Tree>(edges);
 }

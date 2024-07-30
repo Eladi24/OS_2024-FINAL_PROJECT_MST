@@ -1,5 +1,6 @@
 #ifndef MSTFACTORY_HPP
 #define MSTFACTORY_HPP
+#include <memory>
 #include "MSTStrategy.hpp"
 
 class MSTFactory
@@ -21,7 +22,7 @@ class MSTFactory
         * @param g The graph that will be used to find the minimum spanning tree.
         * @return Tree* The minimum spanning tree of the graph g.
         */
-        Tree* createMST(Graph& g);
+        unique_ptr<Tree> createMST(unique_ptr<Graph>& g);
 };
 
 #endif

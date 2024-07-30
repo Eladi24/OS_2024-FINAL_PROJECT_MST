@@ -2,9 +2,6 @@
 
 void Graph::init()
 {
-    
-    adj.resize(V);
-
     for (int i = 0; i < E; i++)
     {
         int u, v, w;

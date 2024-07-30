@@ -1,11 +1,12 @@
 #include <iostream>
 #include <string>
 #include <sstream>
+#include <memory>
 #include "Tree.hpp"
 #include "MSTStrategy.hpp"
 #include "MSTFactory.hpp"
 
-void handleCommands(Graph* g, MSTFactory& factory, Tree* mst)
+void handleCommands(unique_ptr<Graph>& g, MSTFactory& factory, unique_ptr<Tree>& mst)
 {
     string command;
     while (getline(cin, command))
@@ -27,7 +28,7 @@ void handleCommands(Graph* g, MSTFactory& factory, Tree* mst)
                 continue;
             }
         
-            g = new Graph(n, m);
+            g = make_unique<Graph>(n, m);
             cout << "Graph created with " << n << " vertices and " << m << " edges." << endl;
         
         }
@@ -41,12 +42,12 @@ void handleCommands(Graph* g, MSTFactory& factory, Tree* mst)
             }
             if (mst != nullptr)
             {
-                delete mst;
+                mst.reset();
                 mst = nullptr;
             }
             
             factory.setStrategy(new PrimStrategy());
-            mst = factory.createMST(*g);
+            mst = factory.createMST(g);
             cout << "MST created using Prim's algorithm." << endl;
             mst->printMST();
             
@@ -61,12 +62,12 @@ void handleCommands(Graph* g, MSTFactory& factory, Tree* mst)
             }
             if (mst != nullptr)
             {
-                delete mst;
+                mst.reset();
                 mst = nullptr;
             }
 
             factory.setStrategy(new KruskalStrategy());
-            mst = factory.createMST(*g);
+            mst = factory.createMST(g);
             cout << "MST created using Kruskal's algorithm." << endl;
             mst->printMST();
         
@@ -128,8 +129,9 @@ void handleCommands(Graph* g, MSTFactory& factory, Tree* mst)
         }
         else if (cmd == "Exit")
         {
-            delete g;
-            delete mst;
+            // Release memory
+            mst.reset();
+            g.reset();
             break;
         }
         else
@@ -140,11 +142,11 @@ void handleCommands(Graph* g, MSTFactory& factory, Tree* mst)
 }
 
 
-int main()
+int demo()
 {
-    Graph* g = nullptr;
+    unique_ptr<Graph> g;
     MSTFactory factory;
-    Tree* mst = nullptr;
+    unique_ptr<Tree> mst;
     handleCommands(g, factory, mst);
     return 0;
 }

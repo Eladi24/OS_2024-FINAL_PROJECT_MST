@@ -16,6 +16,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <string>
+#include <memory>
 #include "Graph.hpp"
 #include "Tree.hpp"
 #include "MSTStrategy.hpp"
@@ -43,7 +44,13 @@ class Handle
 
 class EventHandler
 {
+    protected:
+        Handle _handle;
+        
+        function<int()> _callback;
+        
     public:
+        EventHandler(int fd, function<int()> callback): _handle(fd), _callback(callback) {}
         virtual ~EventHandler() = default;
         virtual int handleEvent() = 0;
         virtual Handle getHandle() = 0;
@@ -52,10 +59,8 @@ class EventHandler
 
 class AcceptHandler: public EventHandler
 {
-    private:
-        Handle _handle;
     public:
-        AcceptHandler(int fd): _handle(fd) {}
+        AcceptHandler(int fd, function<int()> acceptCallback): EventHandler(fd, acceptCallback) {}
         int handleEvent() override;
         Handle getHandle() override {return _handle;}
 };
@@ -63,9 +68,9 @@ class AcceptHandler: public EventHandler
 class CreateGraphHandler: public EventHandler
 {
     private:
-        Handle _handle;
+        unique_ptr<Graph> _graph;
     public:
-        CreateGraphHandler(int fd): _handle(fd) {}
+        CreateGraphHandler(int fd, unique_ptr<Graph> graph, function<int()> createGraphCallback): EventHandler(fd, createGraphCallback), _graph(move(graph)) {}
         int handleEvent() override;
         Handle getHandle() override {return _handle;}
 };
@@ -73,9 +78,10 @@ class CreateGraphHandler: public EventHandler
 class FindMSTHandler: public EventHandler
 {
     private:
-        Handle _handle;
+        Tree* _mst;
+        MSTFactory _factory;
     public:
-        FindMSTHandler(int fd): _handle(fd) {}
+        FindMSTHandler(int fd, Tree* mst, function<int()> findMSTCallback): EventHandler(fd, findMSTCallback), _mst(mst) {}
         int handleEvent() override;
         Handle getHandle() override {return _handle;}
 };
@@ -83,9 +89,10 @@ class FindMSTHandler: public EventHandler
 class TotalWeightHandler: public EventHandler
 {
     private:
-        Handle _handle;
+        const Tree _mst;
+        
     public:
-        TotalWeightHandler(int fd): _handle(fd) {}
+        TotalWeightHandler(int fd, Tree mst, function<int()> totalWeightCallback): EventHandler(fd, totalWeightCallback), _mst(mst) {}
         int handleEvent() override;
         Handle getHandle() override {return _handle;}
 };
@@ -93,9 +100,11 @@ class TotalWeightHandler: public EventHandler
 class LongestDistanceHandler: public EventHandler
 {
     private:
-        Handle _handle;
+        const Tree _mst;
+        int i;
+        int j;
     public:
-        LongestDistanceHandler(int fd): _handle(fd) {}
+        LongestDistanceHandler(int fd, Tree mst, function<int()> longestDistanceCallback, int i, int j): EventHandler(fd, longestDistanceCallback), _mst(mst), i(i), j(j) {}
         int handleEvent() override;
         Handle getHandle() override {return _handle;}
 };
@@ -103,9 +112,9 @@ class LongestDistanceHandler: public EventHandler
 class AverageDistanceHandler: public EventHandler
 {
     private:
-        Handle _handle;
+        const Tree _mst;
     public:
-        AverageDistanceHandler(int fd): _handle(fd) {}
+        AverageDistanceHandler(int fd, Tree mst, function<int()> averageDistanceCallback): EventHandler(fd, averageDistanceCallback), _mst(mst) {}
         int handleEvent() override;
         Handle getHandle() override {return _handle;}
 };
@@ -113,9 +122,11 @@ class AverageDistanceHandler: public EventHandler
 class ShortestDistanceHandler: public EventHandler
 {
     private:
-        Handle _handle;
+        const Tree _mst;
+        int i;
+        int j;
     public:
-        ShortestDistanceHandler(int fd): _handle(fd) {}
+        ShortestDistanceHandler(int fd, Tree mst, function<int()> shortestDistanceCallback, int i, int j): EventHandler(fd, shortestDistanceCallback), _mst(mst), i(i), j(j) {}
         int handleEvent() override;
         Handle getHandle() override {return _handle;}
 };

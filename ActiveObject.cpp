@@ -10,14 +10,6 @@ ActiveObject::~ActiveObject()
     _worker.join();
 }
 
-template<class F>
-void ActiveObject::enqueue(F task)
-{
-    unique_lock<mutex> lock(_mx);
-    _tasks.emplace(task);
-    lock.unlock();
-    _cv.notify_one();
-}
 
 void ActiveObject::run()
 {
@@ -33,4 +25,18 @@ void ActiveObject::run()
         }
         task();
     }
+}
+
+template<class F>
+function<F()> ActiveObject::dequeue()
+{
+    unique_lock<mutex> lock(_mx);
+    _cv.wait(lock, [this] { return _done || !_tasks.empty(); });
+
+    if (_done && _tasks.empty())
+        return nullptr;
+
+    function<F()> task = move(_tasks.front());
+    _tasks.pop();
+    return task;
 }

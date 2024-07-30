@@ -109,7 +109,7 @@ string Tree::reconstructPath(int src, int dest, const vector<int> &parentTrack)
             result += " -> ";
         }
     }
-    return result;
+    return result + "\n";
 }
 
 
@@ -157,6 +157,7 @@ float Tree::averageDistanceEdges()
             }
         }
     }
+    
     return static_cast<float>(total) / count;
 }
 
@@ -210,14 +211,15 @@ void Tree::removeEdge(int u, int v)
     throw runtime_error("Removing edges is not allowed in a tree");
 }
 
-void Tree::printMST()
+string Tree::printMST()
 {
     vector<bool> visited(V, false);
-    printMST(0, -1, 0, visited);
+    return printMST(0, -1, 0, visited) + "\n";
 }
 
-void Tree::printMST(int node, int parent, int level, vector<bool> &visited)
+string Tree::printMST(int node, int parent, int level, vector<bool> &visited)
 {
+    string result;
     visited[node] = true;
 
     for (auto& edge : adj[node])
@@ -226,10 +228,11 @@ void Tree::printMST(int node, int parent, int level, vector<bool> &visited)
         {
             for (int i = 0; i < level; i++)
             {
-                cout << "  ";
+                result += "  ";
             }
-            cout << node + 1 << " - " << edge.dest << " (" << edge.weight << ")" << endl;
-            printMST(edge.dest - 1, node, level + 1, visited);
+            result += to_string(node + 1) + " - " + to_string(edge.dest) + " (" + to_string(edge.weight) + ")\n";
+            result += printMST(edge.dest - 1, node, level + 1, visited);
         }
     }
+    return result;
 }

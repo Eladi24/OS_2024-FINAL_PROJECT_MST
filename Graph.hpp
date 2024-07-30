@@ -20,7 +20,7 @@ class Graph {
         vector<vector<Edge>> adj;
     public:
         Graph(): V(0), E(0) {}
-        Graph(int V, int E): V(V), E(E) { init(); }
+        Graph(int V, int E): V(V), E(E) { adj.resize(V); }
         virtual ~Graph() = default;
         virtual void init();
         virtual void addEdge(int u, int v, int w);
