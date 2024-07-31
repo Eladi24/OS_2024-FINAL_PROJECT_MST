@@ -15,6 +15,7 @@
 
 const int port = 4050;
 function<void(int)> signalHandlerLambda;
+int clientNumber = 0;
 void signalHandler(int signum)
 {
     cout << "Interrupt signal (" << signum << ") received.\n";
@@ -61,9 +62,9 @@ void setupPipeline(vector<unique_ptr<ActiveObject>> &pipeline)
     auto graphAO = make_unique<ActiveObject>();
 
     // ActiveObject for finding MST using Prim's algorithm
-    auto primAO = std::make_unique<ActiveObject>();
+    auto primAO = make_unique<ActiveObject>();
 
-    auto kruskalAO = std::make_unique<ActiveObject>();
+    auto kruskalAO = make_unique<ActiveObject>();
 
     // ActiveObject for computing MST weight
     auto mstWeightAO = make_unique<ActiveObject>();
@@ -96,6 +97,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
         int bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
         if (bytesReceived <= 0)
         {
+            clientNumber--;
             if (bytesReceived == 0)
             {
                 cout << "Connection closed" << endl;
@@ -138,6 +140,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
                     bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
                     if (bytesReceived <= 0)
                     {
+                        clientNumber--;
                         if (bytesReceived == 0)
                         {
                             cout << "Connection closed" << endl;
@@ -277,7 +280,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
            future = "Average distance of the MST is: ";
             // Add to the queue the function to compute the average distance
             pipeline[6]->enqueue([&mst, &future]()
-                                 { future += to_string(mst->averageDistanceEdges()) + "/n"; });
+                                 { future += to_string(mst->averageDistanceEdges()) + "\n"; });
             
             this_thread::sleep_for(chrono::milliseconds(1));
             
@@ -287,6 +290,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
             sendResponse(clientSock, "Goodbye\n");
             cout << "Thread number " << this_thread::get_id() << " exiting" << endl;
             close(clientSock);
+            clientNumber--;
             break;
         }
         else
@@ -306,9 +310,11 @@ int acceptConnection(int server_sock)
         perror("accept");
         return -1;
     }
+    clientNumber++;
     char s[INET6_ADDRSTRLEN];
     inet_ntop(client_addr.sin_family, &client_addr.sin_addr, s, sizeof s);
-    cout << "server: got connection from " << s << endl;
+    cout << "New connection from " << s << " on socket " << client_sock << endl;
+    cout << "Currently " << clientNumber << " clients connected" << endl;
     return client_sock;
 }
 
@@ -384,7 +390,7 @@ int main()
         }
 
         // Create a new thread for each client
-        std::thread clientThread([newClientSock, &pipeline, &g, &factory, &mst]()
+        thread clientThread([newClientSock, &pipeline, &g, &factory, &mst]()
                                  {
                                  auto clientHandler = make_unique<ActiveObject>();
                                  clientHandler->enqueue([newClientSock, &pipeline, &g, &factory, &mst]()

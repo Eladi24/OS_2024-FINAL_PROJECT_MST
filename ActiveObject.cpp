@@ -4,9 +4,12 @@ ActiveObject::~ActiveObject()
 {
     {
         unique_lock<mutex> lock(_mx);
+        // Let the worker thread know that it should stop
         _done = true;
     }
+    // Wake up the worker thread
     _cv.notify_one();
+    // Wait for the worker thread to finish its previous task
     _worker.join();
 }
 
@@ -25,18 +28,4 @@ void ActiveObject::run()
         }
         task();
     }
-}
-
-template<class F>
-function<F()> ActiveObject::dequeue()
-{
-    unique_lock<mutex> lock(_mx);
-    _cv.wait(lock, [this] { return _done || !_tasks.empty(); });
-
-    if (_done && _tasks.empty())
-        return nullptr;
-
-    function<F()> task = move(_tasks.front());
-    _tasks.pop();
-    return task;
 }

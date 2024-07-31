@@ -4,29 +4,38 @@ CXX = g++
 CXXFLAGS = -std=c++17 -Wall -g
 # Valgrind flags
 Valgrind_FLAGS = VALGRIND_FLAGS=--leak-check=full --show-leak-kinds=all --error-exitcode=99 --track-origins=yes --verbose --log-file=valgrind-out.txt
-# Source files
-SRC = $(wildcard *.cpp)
-# Object files
-OBJ = $(SRC:.cpp=.o)
-# Executable
-EXEC = main
+# Tree Library source files
+LIB_SRC = Graph.cpp Tree.cpp MSTStrategy.cpp MSTFactory.cpp
+# Tree Library object files
+LIB_OBJ = $(LIB_SRC:.cpp=.o)
+# Tree Library target
+LIB_TARGET = libTree.so
+# Pipeline Server source files
+PIP_SRC = PipelineServer.cpp ActiveObject.cpp
+# Pipeline Server object files
+PIP_OBJ = $(PIP_SRC:.cpp=.o)
 
 # Compile
-all: $(EXEC) PipelineServer
+all: PipelineServer Demo
 
-$(EXEC): $(OBJ)
-	$(CXX) $(CXXFLAGS) -o $@ $^
+PipelineServer: $(LIB_TARGET) $(PIP_OBJ)
+	$(CXX) $(CXXFLAGS) -o $@ $(PIP_OBJ) ./$(LIB_TARGET)
+	
+Demo: $(LIB_TARGET) Demo.o
+	$(CXX) $(CXXFLAGS) -o $@ Demo.o ./$(LIB_TARGET)
 
-PipelineServer: $(OBJ)
-	$(CXX) $(CXXFLAGS) -o $@ $^
+# Library
+$(LIB_TARGET): $(LIB_OBJ)
+	$(CXX) -shared -o $@ $(LIB_OBJ)
 
-# Dependencies
-$(OBJ): $(SRC)
-	$(CXX) $(CXXFLAGS) -c $^
+# Object files
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -fPIC -c $<
+
 
 # Run
-run: $(EXEC)
-	./$(EXEC)
+run_pserver: PipelineServer
+	./PipelineServer
 
 # Rebuild
 rebuild: clean all
@@ -36,4 +45,4 @@ rebuild: clean all
 
 # Clean
 clean:
-	rm -f $(OBJ) $(EXEC) PipelineServer valgrind-out.txt
+	rm -f *.o *.so PipelineServer Demo valgrind-out.txt

@@ -29,6 +29,7 @@ void handleCommands(unique_ptr<Graph>& g, MSTFactory& factory, unique_ptr<Tree>&
             }
         
             g = make_unique<Graph>(n, m);
+            g->init();
             cout << "Graph created with " << n << " vertices and " << m << " edges." << endl;
         
         }
@@ -142,7 +143,7 @@ void handleCommands(unique_ptr<Graph>& g, MSTFactory& factory, unique_ptr<Tree>&
 }
 
 
-int demo()
+int main()
 {
     unique_ptr<Graph> g;
     MSTFactory factory;
