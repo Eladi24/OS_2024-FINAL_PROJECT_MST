@@ -52,88 +52,19 @@ protected:
 public:
     EventHandler(int fd, function<int()> callback) : _handle(fd), _callback(callback) {}
     virtual ~EventHandler() = default;
-    virtual int handleEvent() = 0;
+    virtual void handleEvent() = 0;
     virtual int getHandle() = 0;
 };
 
-class AcceptHandler : public EventHandler
+class ConcreteEventHandler : public EventHandler
 {
-public:
-    AcceptHandler(int fd, function<int()> acceptCallback) : EventHandler(fd, acceptCallback) {}
-    int handleEvent() override;
+    public:
+    ConcreteEventHandler(int fd, function<int()> callback) : EventHandler(fd, callback) {}
+    void handleEvent() override;
     int getHandle() override { return _handle; }
+    
 };
 
-class CreateGraphHandler : public EventHandler
-{
-private:
-    unique_ptr<Graph> _graph;
-
-public:
-    CreateGraphHandler(int fd, unique_ptr<Graph> graph, function<int()> createGraphCallback) : EventHandler(fd, createGraphCallback), _graph(move(graph)) {}
-    int handleEvent() override;
-    int getHandle() override { return _handle; }
-};
-
-class FindMSTHandler : public EventHandler
-{
-private:
-    Tree *_mst;
-    MSTFactory _factory;
-
-public:
-    FindMSTHandler(int fd, Tree *mst, function<int()> findMSTCallback) : EventHandler(fd, findMSTCallback), _mst(mst) {}
-    int handleEvent() override;
-    int getHandle() override { return _handle; }
-};
-
-class TotalWeightHandler : public EventHandler
-{
-private:
-    const Tree _mst;
-
-public:
-    TotalWeightHandler(int fd, Tree mst, function<int()> totalWeightCallback) : EventHandler(fd, totalWeightCallback), _mst(mst) {}
-    int handleEvent() override;
-    int getHandle() override { return _handle; }
-};
-
-class LongestDistanceHandler : public EventHandler
-{
-private:
-    const Tree _mst;
-    int i;
-    int j;
-
-public:
-    LongestDistanceHandler(int fd, Tree mst, function<int()> longestDistanceCallback, int i, int j) : EventHandler(fd, longestDistanceCallback), _mst(mst), i(i), j(j) {}
-    int handleEvent() override;
-    int getHandle() override { return _handle; }
-};
-
-class AverageDistanceHandler : public EventHandler
-{
-private:
-    const Tree _mst;
-
-public:
-    AverageDistanceHandler(int fd, Tree mst, function<int()> averageDistanceCallback) : EventHandler(fd, averageDistanceCallback), _mst(mst) {}
-    int handleEvent() override;
-    int getHandle() override { return _handle; }
-};
-
-class ShortestDistanceHandler : public EventHandler
-{
-private:
-    const Tree _mst;
-    int i;
-    int j;
-
-public:
-    ShortestDistanceHandler(int fd, Tree mst, function<int()> shortestDistanceCallback, int i, int j) : EventHandler(fd, shortestDistanceCallback), _mst(mst), i(i), j(j) {}
-    int handleEvent() override;
-    int getHandle() override { return _handle; }
-};
 
 class Reactor
 {
@@ -174,14 +105,14 @@ private:
 public:
     LFThreadPool(size_t numThreads, Reactor *reactor);
     ~LFThreadPool();
-    template <class F>
-    void enqueue(F &&task)
-    {
-        unique_lock<mutex> lock(_queueMutex);
-        _tasks.emplace(forward<F>(task));
-        lock.unlock();
-        _condition.notify_one();
-    }
+    // template <class F>
+    // void enqueue(F &&task)
+    // {
+    //     unique_lock<mutex> lock(_queueMutex);
+    //     _tasks.emplace(forward<F>(task));
+    //     lock.unlock();
+    //     _condition.notify_one();
+    // }
     int promoteNewLeader(void);
     int join(time_t timeout);
     int deactivateHandler(EventHandler *handler, EventType type) { return _reactor->deactivateHandle(handler, type); }

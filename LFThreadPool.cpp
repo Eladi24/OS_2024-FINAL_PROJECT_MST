@@ -1,5 +1,10 @@
 #include "LFThreadPool.hpp"
 
+void ConcreteEventHandler::handleEvent()
+{
+    _callback();
+}
+
 Reactor::~Reactor()
 {
     for (auto &handler : _handlers)
@@ -118,14 +123,6 @@ LFThreadPool::~LFThreadPool()
     }
 }
 
-template <class F>
-void LFThreadPool::enqueue(F &&task)
-{
-    unique_lock<mutex> lock(_queueMutex);
-    _tasks.emplace(forward<F>(task));
-    lock.unlock();
-    _condition.notify_one();
-}
 
 void LFThreadPool::workerThread()
 {
