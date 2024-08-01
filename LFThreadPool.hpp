@@ -47,10 +47,10 @@ class EventHandler
 protected:
     int _handle;
 
-    function<int()> _callback;
+    function<void()> _callback;
 
 public:
-    EventHandler(int fd, function<int()> callback) : _handle(fd), _callback(callback) {}
+    EventHandler(int fd, function<void()> callback) : _handle(fd), _callback(callback) {}
     virtual ~EventHandler() = default;
     virtual void handleEvent() = 0;
     virtual int getHandle() = 0;
@@ -59,8 +59,8 @@ public:
 class ConcreteEventHandler : public EventHandler
 {
     public:
-    ConcreteEventHandler(int fd, function<int()> callback) : EventHandler(fd, callback) {}
-    void handleEvent() override;
+    ConcreteEventHandler(int fd, function<void()> callback) : EventHandler(fd, callback) {}
+    void handleEvent() override { _callback(); }
     int getHandle() override { return _handle; }
     
 };
@@ -70,15 +70,14 @@ class Reactor
 {
 private:
     fd_set _readFds;
-    fd_set _deactivatedReadFds;
     int _maxFd;
     unordered_map<int, EventHandler *> _handlers;
+
 
 public:
     Reactor() : _maxFd(0)
     {
         FD_ZERO(&_readFds);
-        FD_ZERO(&_deactivatedReadFds);
     }
     ~Reactor();
     int registerHandler(EventHandler *handler, EventType type);
@@ -92,31 +91,18 @@ class LFThreadPool
 {
 private:
     vector<thread> _workers;
-    queue<function<void()>> _tasks;
-    mutex _queueMutex;
+    mutex _mx;
     condition_variable _condition;
-    thread::id _leaderId;
-    atomic<bool> _stop;
+    thread::id _leader;
+    bool _stop; 
     Reactor *_reactor;
-    void workerThread();
-    void followerLoop();
-    void leaderLoop();
+    void threadLoop();
 
 public:
     LFThreadPool(size_t numThreads, Reactor *reactor);
     ~LFThreadPool();
-    // template <class F>
-    // void enqueue(F &&task)
-    // {
-    //     unique_lock<mutex> lock(_queueMutex);
-    //     _tasks.emplace(forward<F>(task));
-    //     lock.unlock();
-    //     _condition.notify_one();
-    // }
-    int promoteNewLeader(void);
-    int join(time_t timeout);
-    int deactivateHandler(EventHandler *handler, EventType type) { return _reactor->deactivateHandle(handler, type); }
-    int reactivateHandler(EventHandler *handler, EventType type) { return _reactor->reactivateHandle(handler, type); }
+    void promoteNewLeader(void);
+    void join();
 };
 
 #endif

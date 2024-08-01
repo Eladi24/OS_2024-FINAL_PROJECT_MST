@@ -1,9 +1,5 @@
 #include "LFThreadPool.hpp"
 
-void ConcreteEventHandler::handleEvent()
-{
-    _callback();
-}
 
 Reactor::~Reactor()
 {
@@ -15,28 +11,17 @@ Reactor::~Reactor()
 
 int Reactor::registerHandler(EventHandler *handler, EventType type)
 {
-    Handle handle = handler->getHandle();
-    int fd = handle.getFd();
-    if (type == EventType::READ)
-    {
-        FD_SET(fd, &_readFds);
-    }
-    if (fd > _maxFd)
-    {
-        _maxFd = fd;
-    }
+    int fd = handler->getHandle();
+    FD_SET(fd, &_readFds);
     _handlers[fd] = handler;
+    _maxFd = max(_maxFd, fd);
     return 0;
 }
 
 int Reactor::removeHandler(EventHandler *handler, EventType type)
 {
-    Handle handle = handler->getHandle();
-    int fd = handle.getFd();
-    if (type == EventType::READ)
-    {
-        FD_CLR(fd, &_readFds);
-    }
+    int fd = handler->getHandle();
+    FD_CLR(fd, &_readFds);
     _handlers.erase(fd);
     return 0;
 }
@@ -65,57 +50,35 @@ int Reactor::handleEvents()
 
 int Reactor::deactivateHandle(EventHandler *handler, EventType type)
 {
-    Handle handle = handler->getHandle();
-    int fd = handle.getFd();
-    if (type == EventType::READ)
-    {
-        if (FD_ISSET(fd, &_readFds))
-        {
-            FD_CLR(fd, &_readFds);
-            FD_SET(fd, &_deactivatedReadFds);
-        }
-    }
+    int fd = handler->getHandle();
+    FD_CLR(fd, &_readFds);
     return 0;
 }
 
 int Reactor::reactivateHandle(EventHandler *handler, EventType type)
 {
-    Handle handle = handler->getHandle();
-    int fd = handle.getFd();
-    if (type == EventType::READ)
-    {
-        if (FD_ISSET(fd, &_deactivatedReadFds))
-        {
-            FD_CLR(fd, &_deactivatedReadFds);
-            FD_SET(fd, &_readFds);
-        }
-    }
+    int fd = handler->getHandle();
+    FD_SET(fd, &_readFds);
+    _maxFd = max(_maxFd, fd);
     return 0;
 }
 
 LFThreadPool::LFThreadPool(size_t numThreads, Reactor *reactor) : _stop(false), _reactor(reactor)
 {
-    for (size_t i = 0; i < numThreads; i++)
+    for (size_t i = 0; i < numThreads; ++i)
     {
-        _workers.emplace_back([this]
-                              { 
-            for(;;) {
-                unique_lock<mutex> lock(_queueMutex);
-                _condition.wait(lock, [this] { return _stop || !_tasks.empty(); });
-                if (_stop && _tasks.empty()) return;
-                auto task = move(_tasks.front());
-                _tasks.pop();
-                lock.unlock();
-                task();
-            } });
+        _workers.emplace_back(&LFThreadPool::threadLoop, this);
     }
 }
 
 LFThreadPool::~LFThreadPool()
 {
-    unique_lock<mutex> lock(_queueMutex);
-    _stop = true;
-    lock.unlock();
+    // Stop all worker threads
+    {
+        unique_lock<mutex> lock(_mx);
+        _stop = true;
+    }
+
     _condition.notify_all();
     for (auto &worker : _workers)
     {
@@ -124,67 +87,44 @@ LFThreadPool::~LFThreadPool()
 }
 
 
-void LFThreadPool::workerThread()
+void LFThreadPool::promoteNewLeader(void)
 {
-    while (true)
+    // Lock the mutex
+    unique_lock<mutex> lock(_mx);
+
+    _leader = this_thread::get_id();
+    // Wake up another thread as the new leader
+    _condition.notify_one();
+    
+}
+
+void LFThreadPool::join()
+{
+    for (auto &worker : _workers)
     {
-        function<void()> task;
+        if (worker.joinable())
         {
-            unique_lock<mutex> lock(_queueMutex);
-            _condition.wait(lock, [this]
-                            { return _stop || !_tasks.empty(); });
-            if (_stop && _tasks.empty())
-                return;
-            task = move(_tasks.front());
-            _tasks.pop();
+            worker.join();
         }
-        task();
     }
 }
 
-int LFThreadPool::promoteNewLeader(void)
-{
-    unique_lock<mutex> lock(_queueMutex);
-    if (_workers.empty())
-    {
-        return -1;
-    }
-    _leaderId = _workers.back().get_id();
-    return 0;
-}
-
-void LFThreadPool::leaderLoop()
+void LFThreadPool::threadLoop()
 {
     while (!_stop)
     {
-        _reactor->handleEvents();
-        
-        // Promote a new leader
+        // Only the leader can process events
+        if (this_thread::get_id() == _leader)
         {
-            unique_lock<mutex> lock(_queueMutex);
-            _leaderId = thread::id();
-            _condition.notify_all();
+            _reactor->handleEvents();
+            promoteNewLeader();
         }
-
-        // Yield to allow other threads to acquire the leadership
-        this_thread::yield();
-    }
-}
-
-void LFThreadPool::followerLoop()
-{
-    while (!_stop)
-    {
+        else
         {
-            unique_lock<mutex> lock(_queueMutex);
-            _condition.wait(lock, [this] { return _leaderId == thread::id() || _stop; });
-            if (_stop)
-                return;
-
-            // Become the leader
-            _leaderId = this_thread::get_id();
+            // Lock the mutex
+            unique_lock<mutex> lock(_mx);
+            // Wait for the leader to change
+            _condition.wait(lock, [this] { return this_thread::get_id() == _leader || _stop; });
         }
-        
-        leaderLoop();
     }
 }

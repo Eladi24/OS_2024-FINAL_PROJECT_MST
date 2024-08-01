@@ -15,12 +15,18 @@ PIP_SRC = PipelineServer.cpp ActiveObject.cpp
 # Pipeline Server object files
 PIP_OBJ = $(PIP_SRC:.cpp=.o)
 
+LF_SRC = LFServer.cpp LFThreadPool.cpp
+LF_OBJ = $(LF_SRC:.cpp=.o)
+
 # Compile
-all: PipelineServer Demo
+all: PipelineServer LFServer Demo
 
 PipelineServer: $(LIB_TARGET) $(PIP_OBJ)
 	$(CXX) $(CXXFLAGS) -o $@ $(PIP_OBJ) ./$(LIB_TARGET)
-	
+
+LFServer: $(LIB_TARGET) $(LF_OBJ)
+	$(CXX) $(CXXFLAGS) -o $@ $(LF_OBJ) ./$(LIB_TARGET)
+
 Demo: $(LIB_TARGET) Demo.o
 	$(CXX) $(CXXFLAGS) -o $@ Demo.o ./$(LIB_TARGET)
 

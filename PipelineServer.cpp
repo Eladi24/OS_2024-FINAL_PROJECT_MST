@@ -300,6 +300,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
         sendResponse(clientSock, future);
     }
 }
+
 int acceptConnection(int server_sock)
 {
     struct sockaddr_in client_addr;
@@ -376,7 +377,7 @@ int main()
         exit(1);
     }
 
-    cout << "MST server waiting for requests on port " << port << endl;
+    cout << "MST pipeline server waiting for requests on port " << port << endl;
     // The pipeline of active objects
 
     setupPipeline(pipeline);
