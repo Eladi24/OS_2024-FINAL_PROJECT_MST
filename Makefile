@@ -32,11 +32,6 @@ $(LIB_TARGET): $(LIB_OBJ)
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -fPIC -c $<
 
-
-# Run
-run_pserver: PipelineServer
-	./PipelineServer
-
 # Rebuild
 rebuild: clean all
 
