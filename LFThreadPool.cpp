@@ -1,24 +1,24 @@
 #include "LFThreadPool.hpp"
 
-
 Reactor::~Reactor()
 {
     for (auto &handler : _handlers)
     {
-        delete handler.second;
+        FD_CLR(handler.first, &_readFds);
+        handler.second.reset();
     }
 }
 
-int Reactor::registerHandler(EventHandler *handler, EventType type)
+int Reactor::registerHandler(shared_ptr<EventHandler> handler, EventType type)
 {
     int fd = handler->getHandle();
     FD_SET(fd, &_readFds);
-    _handlers[fd] = handler;
+    _handlers[fd] = move(handler);
     _maxFd = max(_maxFd, fd);
     return 0;
 }
 
-int Reactor::removeHandler(EventHandler *handler, EventType type)
+int Reactor::removeHandler(shared_ptr<EventHandler> handler, EventType type)
 {
     int fd = handler->getHandle();
     FD_CLR(fd, &_readFds);
@@ -28,9 +28,10 @@ int Reactor::removeHandler(EventHandler *handler, EventType type)
 
 int Reactor::handleEvents()
 {
+    
     fd_set tempFds = _readFds;
     int activity = select(_maxFd + 1, &tempFds, nullptr, nullptr, nullptr);
-    
+
     if (activity < 0 && errno != EINTR)
     {
         cerr << "select error" << endl;
@@ -41,38 +42,48 @@ int Reactor::handleEvents()
     {
         if (FD_ISSET(fd, &tempFds))
         {
-            _handlers[fd]->handleEvent();
+            if (_handlers.find(fd) != _handlers.end())
+            {
+                _handlers[fd]->handleEvent();
+            }
         }
     }
-    
+
+    cout << "Finished handling events" << endl;
     return 0;
 }
 
-int Reactor::deactivateHandle(EventHandler *handler, EventType type)
+int Reactor::deactivateHandle(int fd, EventType type)
 {
-    int fd = handler->getHandle();
+
     FD_CLR(fd, &_readFds);
     return 0;
 }
 
-int Reactor::reactivateHandle(EventHandler *handler, EventType type)
+int Reactor::reactivateHandle(int fd, EventType type)
 {
-    int fd = handler->getHandle();
     FD_SET(fd, &_readFds);
     _maxFd = max(_maxFd, fd);
     return 0;
 }
 
-LFThreadPool::LFThreadPool(size_t numThreads, Reactor *reactor) : _stop(false), _reactor(reactor)
+LFThreadPool::LFThreadPool(size_t numThreads, shared_ptr<Reactor> reactor)
+    : _stop(false), _reactor(reactor)
 {
-    for (size_t i = 0; i < numThreads; ++i)
+    // Start the follower threads
+    for (size_t i = 1; i < numThreads; ++i)
     {
-        _workers.emplace_back(&LFThreadPool::threadLoop, this);
+        thread t(&LFThreadPool::followerLoop, this);
+        _followersState[t.get_id()] = false;
+        _followers.push_back(move(t));
+        
     }
+    
 }
 
 LFThreadPool::~LFThreadPool()
 {
+    cout << "LFThreadPool destructor" << endl;
     // Stop all worker threads
     {
         unique_lock<mutex> lock(_mx);
@@ -80,51 +91,60 @@ LFThreadPool::~LFThreadPool()
     }
 
     _condition.notify_all();
-    for (auto &worker : _workers)
-    {
-        worker.join();
-    }
+    join();
 }
 
-
-void LFThreadPool::promoteNewLeader(void)
+void LFThreadPool::promoteNewLeader()
 {
-    // Lock the mutex
-    unique_lock<mutex> lock(_mx);
-
-    _leader = this_thread::get_id();
-    // Wake up another thread as the new leader
-    _condition.notify_one();
     
+    // Find the next thread to be the leader
+    for (auto &follower : _followers)
+
+    {
+        if (follower.get_id() != _leader && !_followersState[follower.get_id()])
+        {
+            cout << "Promoting new leader: " << follower.get_id() << endl;
+            _leader = follower.get_id();
+            // Notify the new leader
+            _followersState[_leader] = true;
+            _condition.notify_one();
+            return;
+        }
+    }
 }
 
 void LFThreadPool::join()
 {
-    for (auto &worker : _workers)
+    for (auto &follower : _followers)
     {
-        if (worker.joinable())
+        if (follower.joinable())
         {
-            worker.join();
+            follower.join();
         }
     }
 }
 
-void LFThreadPool::threadLoop()
+void LFThreadPool::followerLoop()
 {
-    while (!_stop)
+   cout << "Follower thread " << this_thread::get_id() << " started" << endl;
+    while (true)
     {
-        // Only the leader can process events
-        if (this_thread::get_id() == _leader)
-        {
-            _reactor->handleEvents();
-            promoteNewLeader();
-        }
-        else
-        {
-            // Lock the mutex
-            unique_lock<mutex> lock(_mx);
-            // Wait for the leader to change
-            _condition.wait(lock, [this] { return this_thread::get_id() == _leader || _stop; });
-        }
+        unique_lock<mutex> lock(_mx);
+
+        // Wait until this thread becomes the leader or stop is signaled
+        _condition.wait(lock, [this]
+                        { return _followersState[this_thread::get_id()] || _stop; });
+
+        if (_stop)
+            break;
+        
+        // Handle events
+        cout << "Thread " << this_thread::get_id() << " handling events" << endl;
+        promoteNewLeader();
+        _reactor->handleEvents();
+        _followersState[this_thread::get_id()] = false;
+        
     }
 }
+
+

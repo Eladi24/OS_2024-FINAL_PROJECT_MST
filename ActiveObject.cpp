@@ -16,6 +16,7 @@ ActiveObject::~ActiveObject()
 
 void ActiveObject::run()
 {
+    cout << "Worker thread id: " << _worker.get_id() << endl;
     while (true)
     {
         function<void()> task;

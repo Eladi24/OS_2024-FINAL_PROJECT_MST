@@ -327,6 +327,7 @@ int main()
     unique_ptr<Graph> g;
     MSTFactory factory;
     unique_ptr<Tree> mst;
+    
     signalHandlerLambda = [&](int signum)
     {
         cout << "Freeing memory" << endl;

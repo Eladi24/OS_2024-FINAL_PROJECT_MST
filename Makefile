@@ -3,7 +3,7 @@ CXX = g++
 # Compiler flags
 CXXFLAGS = -std=c++17 -Wall -g
 # Valgrind flags
-Valgrind_FLAGS = VALGRIND_FLAGS=--leak-check=full --show-leak-kinds=all --error-exitcode=99 --track-origins=yes --verbose --log-file=valgrind-out.txt
+Valgrind_FLAGS = valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=99 --track-origins=yes --verbose --log-file=valgrind-out.txt
 # Tree Library source files
 LIB_SRC = Graph.cpp Tree.cpp MSTStrategy.cpp MSTFactory.cpp
 # Tree Library object files
@@ -38,11 +38,15 @@ $(LIB_TARGET): $(LIB_OBJ)
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -fPIC -c $<
 
+# Valgrind
+pipeline_valgrind: PipelineServer
+	$(Valgrind_FLAGS) ./PipelineServer
+
 # Rebuild
 rebuild: clean all
 
 # Phony
-.PHONY: clean all run
+.PHONY: clean all rebuild pipeline_valgrind
 
 # Clean
 clean:

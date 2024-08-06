@@ -10,6 +10,7 @@
 #include <vector>
 #include <atomic>
 #include <unordered_map>
+#include <map>
 #include <sys/select.h>
 #include <unistd.h>
 #include <sys/socket.h>
@@ -29,7 +30,8 @@ enum class EventType
     READ,
     WRITE,
     ACCEPT,
-    CONNECT
+    CONNECT,
+    DISCONNECT
 };
 
 class Handle
@@ -46,7 +48,6 @@ class EventHandler
 {
 protected:
     int _handle;
-
     function<void()> _callback;
 
 public:
@@ -71,38 +72,41 @@ class Reactor
 private:
     fd_set _readFds;
     int _maxFd;
-    unordered_map<int, EventHandler *> _handlers;
+    map<int, shared_ptr<EventHandler>> _handlers;
 
 
 public:
     Reactor() : _maxFd(0)
     {
         FD_ZERO(&_readFds);
+        
     }
     ~Reactor();
-    int registerHandler(EventHandler *handler, EventType type);
-    int removeHandler(EventHandler *handler, EventType type);
+    int registerHandler(shared_ptr<EventHandler> handler, EventType type);
+    int removeHandler(shared_ptr<EventHandler> handler, EventType type);
     int handleEvents();
-    int deactivateHandle(EventHandler *handler, EventType type);
-    int reactivateHandle(EventHandler *handler, EventType type);
+    int deactivateHandle(int fd, EventType type);
+    int reactivateHandle(int fd, EventType type);
 };
 
 class LFThreadPool
 {
 private:
-    vector<thread> _workers;
+    vector<thread> _followers;
+    map<thread::id, atomic<bool>> _followersState;
     mutex _mx;
     condition_variable _condition;
-    thread::id _leader;
     bool _stop; 
-    Reactor *_reactor;
-    void threadLoop();
-
+    shared_ptr<Reactor> _reactor;
+    thread::id _leader;
+    void followerLoop();
+    
 public:
-    LFThreadPool(size_t numThreads, Reactor *reactor);
+    LFThreadPool(size_t numThreads, shared_ptr<Reactor> reactor);
     ~LFThreadPool();
-    void promoteNewLeader(void);
+    void promoteNewLeader();
     void join();
+    
 };
 
 #endif

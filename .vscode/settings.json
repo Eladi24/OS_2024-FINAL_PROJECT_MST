@@ -66,6 +66,11 @@
             "cwd": "/home/eladubuntu/Git Projects/OS_2024-FINAL_PROJECT_MST",
             "binaryPath": "/home/eladubuntu/Git Projects/OS_2024-FINAL_PROJECT_MST/PipelineServer",
             "binaryArgs": []
+        },
+        {
+            "cwd": "/home/eladubuntu/Git Projects/OS_2024-FINAL_PROJECT_MST",
+            "binaryPath": "/home/eladubuntu/Git Projects/OS_2024-FINAL_PROJECT_MST/LFServer",
+            "binaryArgs": []
         }
     ]
 }
