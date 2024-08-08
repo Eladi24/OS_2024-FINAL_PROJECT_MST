@@ -1,7 +1,6 @@
 #include "MSTFactory.hpp"
 #include "MSTStrategy.hpp"
 
-
 void MSTFactory::setStrategy(std::unique_ptr<MSTStrategy> strategy)
 {
     this->strategy = std::move(strategy);

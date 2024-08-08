@@ -1,53 +1,40 @@
-# Compiler g++
 CXX = g++
-# Compiler flags
-CXXFLAGS = -std=c++17 -Wall -g
-# Valgrind flags
-Valgrind_FLAGS = valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=99 --track-origins=yes --verbose --log-file=valgrind-out.txt
-# Tree Library source files
-LIB_SRC = Graph.cpp Tree.cpp MSTStrategy.cpp MSTFactory.cpp
-# Tree Library object files
-LIB_OBJ = $(LIB_SRC:.cpp=.o)
-# Tree Library target
-LIB_TARGET = libTree.so
-# Pipeline Server source files
-PIP_SRC = PipelineServer.cpp ActiveObject.cpp
-# Pipeline Server object files
-PIP_OBJ = $(PIP_SRC:.cpp=.o)
+CXXFLAGS = -std=c++17 -Wall -g -fPIC
 
-LF_SRC = LFServer.cpp LFThreadPool.cpp
-LF_OBJ = $(LF_SRC:.cpp=.o)
+all: PipelineServer LFServer
 
-# Compile
-all: PipelineServer LFServer Demo
+PipelineServer: PipelineServer.o ActiveObject.o libTree.so
+	$(CXX) $(CXXFLAGS) -o PipelineServer PipelineServer.o ActiveObject.o ./libTree.so
 
-PipelineServer: $(LIB_TARGET) $(PIP_OBJ)
-	$(CXX) $(CXXFLAGS) -o $@ $(PIP_OBJ) ./$(LIB_TARGET)
+LFServer: LFServer.o LFThreadPool.o ActiveObject.o libTree.so
+	$(CXX) $(CXXFLAGS) -o LFServer LFServer.o LFThreadPool.o ActiveObject.o ./libTree.so
 
-LFServer: $(LIB_TARGET) $(LF_OBJ)
-	$(CXX) $(CXXFLAGS) -o $@ $(LF_OBJ) ./$(LIB_TARGET)
+PipelineServer.o: PipelineServer.cpp
+	$(CXX) $(CXXFLAGS) -c PipelineServer.cpp
 
-Demo: $(LIB_TARGET) Demo.o
-	$(CXX) $(CXXFLAGS) -o $@ Demo.o ./$(LIB_TARGET)
+LFServer.o: LFServer.cpp
+	$(CXX) $(CXXFLAGS) -c LFServer.cpp
 
-# Library
-$(LIB_TARGET): $(LIB_OBJ)
-	$(CXX) -shared -o $@ $(LIB_OBJ)
+LFThreadPool.o: LFThreadPool.cpp
+	$(CXX) $(CXXFLAGS) -c LFThreadPool.cpp
 
-# Object files
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -fPIC -c $<
+ActiveObject.o: ActiveObject.cpp
+	$(CXX) $(CXXFLAGS) -c ActiveObject.cpp
 
-# Valgrind
-pipeline_valgrind: PipelineServer
-	$(Valgrind_FLAGS) ./PipelineServer
+libTree.so: Graph.o Tree.o MSTStrategy.o MSTFactory.o
+	$(CXX) $(CXXFLAGS) -shared -o libTree.so Graph.o Tree.o MSTStrategy.o MSTFactory.o
 
-# Rebuild
-rebuild: clean all
+Graph.o: Graph.cpp
+	$(CXX) $(CXXFLAGS) -c Graph.cpp
 
-# Phony
-.PHONY: clean all rebuild pipeline_valgrind
+Tree.o: Tree.cpp
+	$(CXX) $(CXXFLAGS) -c Tree.cpp
 
-# Clean
+MSTStrategy.o: MSTStrategy.cpp
+	$(CXX) $(CXXFLAGS) -c MSTStrategy.cpp
+
+MSTFactory.o: MSTFactory.cpp
+	$(CXX) $(CXXFLAGS) -c MSTFactory.cpp
+
 clean:
-	rm -f *.o *.so PipelineServer Demo valgrind-out.txt
+	rm -f *.o PipelineServer LFServer libTree.so

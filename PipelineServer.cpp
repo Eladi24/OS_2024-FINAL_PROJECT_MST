@@ -227,49 +227,39 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
             this_thread::sleep_for(chrono::milliseconds(1));
         }
 
-        else if (cmd == "Shortestpath")
-        {
-            if (mst == nullptr)
-            {
-                cerr << "MST not created" << endl;
-                continue;
-            }
+      else if (cmd == "Shortestpath")
+{
+    if (mst == nullptr)
+    {
+        cerr << "MST not created" << endl;
+        continue;
+    }
 
-            int src, dest;
-            int res;
-            pipeline[4]->enqueue([&ss, &src, &dest, &res]()
-                                 { res = scanSrcDest(ss, src, dest); });
-            this_thread::sleep_for(chrono::milliseconds(1));
+    // Add to the queue the function to find the shortest path in the MST
+    pipeline[4]->enqueue([&mst, &future]()
+                         { 
+                             int shortest = mst->shortestPath();
+                             future = "Shortest path in the MST is: " + to_string(shortest) + "\n"; 
+                         });
+    this_thread::sleep_for(chrono::milliseconds(1));
+}
 
-            if (res == -1)
-                continue;
-            future = "Shortest path from " + to_string(src) + " to " + to_string(dest) + " is: ";
-            // Add to the queue the function to find the shortest path
-            pipeline[4]->enqueue([&mst, &src, &dest, &future]()
-                                 { future += mst->shortestPath(src, dest); });
-            this_thread::sleep_for(chrono::milliseconds(1));
-        }
-        else if (cmd == "Longestpath")
-        {
-            if (mst == nullptr)
-            {
-                cerr << "MST not created" << endl;
-                continue;
-            }
+       else if (cmd == "Longestpath")
+{
+    if (mst == nullptr)
+    {
+        cerr << "MST not created" << endl;
+        continue;
+    }
 
-            int src, dest;
-            int res;
-            pipeline[5]->enqueue([&ss, &src, &dest, &res]()
-                                 { res = scanSrcDest(ss, src, dest); });
-            if (res == -1)
-                continue;
-            future = "Longest path from " + to_string(src) + " to " + to_string(dest) + " is: ";
-            // Add to the queue the function to find the longest path
-            pipeline[5]->enqueue([&mst, &src, &dest, &future]()
-                                 { future += mst->longestPath(src, dest); });
-            this_thread::sleep_for(chrono::milliseconds(1));
-        }
-        else if (cmd == "Averdist")
+    // Add to the queue the function to find the diameter (longest path) in the MST
+    pipeline[5]->enqueue([&mst, &future]()
+                         { 
+                             int diameter = mst->diameter();
+                             future = "Diameter of the MST (longest path) is: " + to_string(diameter) + "\n"; 
+                         });
+    this_thread::sleep_for(chrono::milliseconds(1));
+}        else if (cmd == "Averdist")
         {
             if (mst == nullptr)
             {

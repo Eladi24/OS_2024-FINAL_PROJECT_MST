@@ -1,20 +1,16 @@
 #include "ActiveObject.hpp"
 
-ActiveObject::ActiveObject()
-    : _worker(&ActiveObject::run, this) {}
+ActiveObject::ActiveObject() : _done(false) {
+    _worker = std::thread(&ActiveObject::run, this);
+}
 
 ActiveObject::~ActiveObject() {
     {
         std::unique_lock<std::mutex> lock(_mx);
-        // Let the worker thread know that it should stop
         _done = true;
     }
-    // Wake up the worker thread
     _cv.notify_one();
-    // Wait for the worker thread to finish its previous task
-    if (_worker.joinable()) {
-        _worker.join();
-    }
+    _worker.join();
 }
 
 void ActiveObject::enqueue(std::function<void()> task) {
@@ -22,7 +18,6 @@ void ActiveObject::enqueue(std::function<void()> task) {
         std::unique_lock<std::mutex> lock(_mx);
         _tasks.push(std::move(task));
     }
-    // Notify the worker thread that a new task is available
     _cv.notify_one();
 }
 

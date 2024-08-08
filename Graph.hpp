@@ -5,13 +5,9 @@
 #include <queue>
 #include <algorithm>
 #include <sstream>
+#include "Edge.hpp"
 using namespace std;
 
-typedef struct Edge {
-    int src;
-    int dest;
-    int weight;
-}Edge;
 
 class Graph {
     protected:

@@ -1,34 +1,41 @@
 #ifndef TREE_HPP
 #define TREE_HPP
-#include <limits.h>
 
-#include "Graph.hpp"
+#include <iostream>
+#include <vector>
 #include <queue>
-#include <utility>
+#include <algorithm>
+#include <string>
+#include "Edge.hpp" // Include the Edge header file
 
-class Tree: public Graph
-{
-    private:
-        vector<vector<int>> distanceMap;
-        void dfs(int node, int parent, vector<int>& dist, vector<int>& parentTrack);
-        vector<int> dijkstra(int src, vector<int>& parentTrack);
-        string reconstructPath(int src, int dest, const vector<int>& parentTrack);
-        void floydWarshall();
-        void init(vector<Edge> edges);
-        string printMST(int node, int parent, int level, vector<bool>& visited);
+using namespace std;
 
-    public:    
-        Tree(): Graph() {}
-        Tree(vector<Edge> edges): Graph() { init(edges); }
-        int totalWeight();
-        float averageDistanceEdges();
-        
-        string shortestPath(int u, int v);
-        string longestPath(int u, int v);
-        void addEdge(int u, int v, int w) override;
-        void removeEdge(int u, int v) override;
-        string printMST();
+class Tree {
+public:
+    Tree() = default;
+    Tree(const vector<Edge>& edges) { init(edges); } // Constructor that takes a vector of edges
+    void init(vector<Edge> edges);
+    int totalWeight();
+    float averageDistanceEdges();
+    int shortestPath(); // Method for calculating the shortest path in the MST
+    int diameter(); // Method for calculating the diameter of the MST
+    void addEdge(int u, int v, int w);
+    void removeEdge(int u, int v);
+    string printMST();
+    int getVerticesNumber() const { return V; }
+    const vector<vector<Edge>>& getAdj() const { return adj; }
 
+private:
+    int V; // Number of vertices
+    int E; // Number of edges
+    vector<vector<Edge>> adj;
+    vector<vector<int>> distanceMap;
+
+    vector<int> dijkstra(int src, vector<int> &parentTrack);
+    void dfs(int node, int parent, vector<int> &dist, vector<int> &parentTrack);
+    void floydWarshall();
+    string reconstructPath(int src, int dest, const vector<int> &parentTrack);
+    string printMST(int node, int parent, int level, vector<bool> &visited);
 };
 
-#endif
+#endif // TREE_HPP
