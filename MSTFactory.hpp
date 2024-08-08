@@ -1,28 +1,12 @@
-#ifndef MSTFACTORY_HPP
-#define MSTFACTORY_HPP
 #include <memory>
+#include "Tree.hpp"
 #include "MSTStrategy.hpp"
 
-class MSTFactory
-{
-    private:
-        MSTStrategy* strategy;
-        
-    public:
-        ~MSTFactory(){delete strategy;}
-        /*
-        * @brief This method will set the strategy that will be used to find the minimum spanning tree.
-        * @param strategy The strategy that will be used to find the minimum spanning tree.
-        * @return void
-        */
-        void setStrategy(MSTStrategy* strategy);
+class MSTFactory {
+public:
+    void setStrategy(std::unique_ptr<MSTStrategy> strategy);
+    std::unique_ptr<Tree> createMST(std::unique_ptr<Graph>& g);
 
-        /*
-        * @brief This method will create the minimum spanning tree of the graph g using the strategy set.
-        * @param g The graph that will be used to find the minimum spanning tree.
-        * @return Tree* The minimum spanning tree of the graph g.
-        */
-        unique_ptr<Tree> createMST(unique_ptr<Graph>& g);
+private:
+    std::unique_ptr<MSTStrategy> strategy;
 };
-
-#endif

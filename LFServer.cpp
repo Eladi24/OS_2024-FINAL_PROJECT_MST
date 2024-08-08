@@ -8,8 +8,6 @@
 
 #include "Graph.hpp"
 #include "Tree.hpp"
-#include "MSTFactory.hpp"
-#include "MSTFactory.hpp"
 #include "LFThreadPool.hpp"
 
 const int port = 4050;
@@ -157,7 +155,7 @@ void handleCommands(int clientSock, shared_ptr<Reactor> &reactor, unique_ptr<Gra
 
             // Create new event handler for setting the strategy and add it to the reactor
             shared_ptr<EventHandler> primHandler = make_shared<ConcreteEventHandler>(clientSock, [&factory]()
-                                                                                     { factory.setStrategy(new PrimStrategy()); });
+                                                                                     { factory.setStrategy(std::make_unique<PrimStrategy>()); });
             reactor->registerHandler(primHandler, EventType::WRITE);
             shared_ptr<EventHandler> mstHandler = make_shared<ConcreteEventHandler>(clientSock, [&g, &factory, &mst]()
                                                                                     { mst = factory.createMST(g); });
@@ -184,7 +182,7 @@ void handleCommands(int clientSock, shared_ptr<Reactor> &reactor, unique_ptr<Gra
 
             // Create new event handler for setting the strategy and add it to the reactor
             shared_ptr<EventHandler> kruskalHandler = make_shared<ConcreteEventHandler>(clientSock, [&factory]()
-                                                                                        { factory.setStrategy(new KruskalStrategy()); });
+                                                                                        { factory.setStrategy(std::make_unique<KruskalStrategy>()); });
             reactor->registerHandler(kruskalHandler, EventType::WRITE);
             // Create new event handler for creating the MST and add it to the reactor
             shared_ptr<EventHandler> mstHandler = make_shared<ConcreteEventHandler>(clientSock, [&g, &factory, &mst]()

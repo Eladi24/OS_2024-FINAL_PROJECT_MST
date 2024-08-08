@@ -47,7 +47,7 @@ void handleCommands(unique_ptr<Graph>& g, MSTFactory& factory, unique_ptr<Tree>&
                 mst = nullptr;
             }
             
-            factory.setStrategy(new PrimStrategy());
+            factory.setStrategy(std::make_unique<PrimStrategy>());
             mst = factory.createMST(g);
             cout << "MST created using Prim's algorithm." << endl;
             mst->printMST();
@@ -67,7 +67,7 @@ void handleCommands(unique_ptr<Graph>& g, MSTFactory& factory, unique_ptr<Tree>&
                 mst = nullptr;
             }
 
-            factory.setStrategy(new KruskalStrategy());
+            factory.setStrategy(std::make_unique<KruskalStrategy>());
             mst = factory.createMST(g);
             cout << "MST created using Kruskal's algorithm." << endl;
             mst->printMST();

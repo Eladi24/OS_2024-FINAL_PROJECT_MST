@@ -1,16 +1,14 @@
 #include "MSTFactory.hpp"
+#include "MSTStrategy.hpp"
 
-void MSTFactory::setStrategy(MSTStrategy* strategy)
+
+void MSTFactory::setStrategy(std::unique_ptr<MSTStrategy> strategy)
 {
-    if (this->strategy != nullptr)
-    {
-        delete this->strategy;
-    }
-    this->strategy = strategy;
+    this->strategy = std::move(strategy);
 }
 
-unique_ptr<Tree> MSTFactory::createMST(unique_ptr<Graph>& g)
+std::unique_ptr<Tree> MSTFactory::createMST(std::unique_ptr<Graph>& g)
 {
-    vector<Edge> edges = strategy->findMST(*g);
-    return make_unique<Tree>(edges);
+    std::vector<Edge> edges = strategy->findMST(*g);
+    return std::make_unique<Tree>(edges);
 }

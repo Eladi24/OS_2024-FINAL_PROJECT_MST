@@ -1,49 +1,50 @@
 #include "Graph.hpp"
 
-void Graph::init()
-{
-    for (int i = 0; i < E; i++)
-    {
+void Graph::init() {
+    adj.clear();
+    adj.resize(V); // Ensure the adjacency list is resized to the number of vertices
+
+    for (int i = 0; i < E; i++) {
         int u, v, w;
-        
-        if (!(cin >> u >> v >> w) || u < 0 || u > V || v < 0 || v > V)
-        {
-            cerr << "Invalid edge" << endl;
-            exit(1);
+
+        if (!(std::cin >> u >> v >> w) || u < 1 || u > V || v < 1 || v > V) {
+            std::cerr << "Invalid edge" << std::endl;
+            exit(1); // Halt the process on invalid edge input
         }
         addEdge(u, v, w);
     }
 
-    cout << "Graph initialized with " << V << " vertices and " << E << " edges" << endl;
+    std::cout << "Graph initialized with " << V << " vertices and " << E << " edges" << std::endl;
 }
 
-void Graph::addEdge(int u, int v, int w)
-{
+void Graph::addEdge(int u, int v, int w) {
+    if (u < 1 || u > V || v < 1 || v > V) {
+        std::cerr << "Invalid edge, vertices must be between 1 and " << V << std::endl;
+        return;
+    }
     adj[u - 1].push_back({u, v, w});
     adj[v - 1].push_back({v, u, w});
 }
 
 void Graph::removeEdge(int u, int v) {
-        // Remove edge u -> v
-        adj[u].erase(remove_if(adj[u].begin(), adj[u].end(), [v](const Edge& e) {
-            return e.dest == v;
-        }), adj[u].end());
+    u -= 1;
+    v -= 1;
 
-        // Remove edge v -> u
-        adj[v].erase(remove_if(adj[v].begin(), adj[v].end(), [u](const Edge& e) {
-            return e.dest == u;
-        }), adj[v].end());
-    }
+    adj[u].erase(std::remove_if(adj[u].begin(), adj[u].end(), [v](const Edge& e) {
+        return e.dest - 1 == v;
+    }), adj[u].end());
 
-vector<vector<int>> Graph::getAdjMatrix() const
-{
-    vector<vector<int>> adjMatrix(V, vector<int>(V, 0));
+    adj[v].erase(std::remove_if(adj[v].begin(), adj[v].end(), [u](const Edge& e) {
+        return e.dest - 1 == u;
+    }), adj[v].end());
+}
 
-    for (int i = 0; i < V; i++)
-    {
-        for (Edge e : adj[i])
-        {
-            adjMatrix[i][e.dest] = e.weight;
+std::vector<std::vector<int>> Graph::getAdjMatrix() const {
+    std::vector<std::vector<int>> adjMatrix(V, std::vector<int>(V, 0));
+
+    for (int i = 0; i < V; i++) {
+        for (const Edge& e : adj[i]) {
+            adjMatrix[i][e.dest - 1] = e.weight;
         }
     }
 

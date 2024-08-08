@@ -10,7 +10,7 @@
 #include "Graph.hpp"
 #include "Tree.hpp"
 #include "MSTFactory.hpp"
-#include "MSTFactory.hpp"
+
 #include "ActiveObject.hpp"
 
 const int port = 4050;
@@ -177,7 +177,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
 
             // Add to the queue the function to set the strategy
             pipeline[1]->enqueue([&factory]()
-                                 { factory.setStrategy(new PrimStrategy()); });
+                                 { factory.setStrategy(std::make_unique<PrimStrategy>()); });
             pipeline[1]->enqueue([&g, &factory, &mst]()
                                  { mst = factory.createMST(g); });
             future = "MST created using Prim's algorithm.\n";
@@ -201,7 +201,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
 
             // Add to the queue the function to set the strategy
             pipeline[2]->enqueue([&factory]()
-                                 { factory.setStrategy(new KruskalStrategy()); });
+                                 { factory.setStrategy(std::make_unique<KruskalStrategy>()); });
             // Add to the queue the function to create the MST
             pipeline[2]->enqueue([&g, &factory, &mst]()
                                  { mst = factory.createMST(g); });
