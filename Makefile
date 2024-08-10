@@ -6,8 +6,8 @@ all: PipelineServer LFServer
 PipelineServer: PipelineServer.o ActiveObject.o libTree.so
 	$(CXX) $(CXXFLAGS) -o PipelineServer PipelineServer.o ActiveObject.o ./libTree.so
 
-LFServer: LFServer.o LFThreadPool.o ActiveObject.o libTree.so
-	$(CXX) $(CXXFLAGS) -o LFServer LFServer.o LFThreadPool.o ActiveObject.o ./libTree.so
+LFServer: LFServer.o LFThreadPool.o ActiveObject.o Reactor.o libTree.so
+	$(CXX) $(CXXFLAGS) -o LFServer LFServer.o LFThreadPool.o ActiveObject.o Reactor.o ./libTree.so
 
 PipelineServer.o: PipelineServer.cpp
 	$(CXX) $(CXXFLAGS) -c PipelineServer.cpp
@@ -20,6 +20,9 @@ LFThreadPool.o: LFThreadPool.cpp
 
 ActiveObject.o: ActiveObject.cpp
 	$(CXX) $(CXXFLAGS) -c ActiveObject.cpp
+
+Reactor.o: Reactor.cpp Reactor.hpp
+	$(CXX) $(CXXFLAGS) -c Reactor.cpp
 
 libTree.so: Graph.o Tree.o MSTStrategy.o MSTFactory.o
 	$(CXX) $(CXXFLAGS) -shared -o libTree.so Graph.o Tree.o MSTStrategy.o MSTFactory.o

@@ -1,112 +1,33 @@
-#ifndef _LFTHREADPOOL_HPP
-#define _LFTHREADPOOL_HPP
+#ifndef LFTHREADPOOL_HPP
+#define LFTHREADPOOL_HPP
 
-#include <iostream>
 #include <thread>
-#include <mutex>
-#include <condition_variable>
-#include <queue>
-#include <functional>
 #include <vector>
-#include <atomic>
-#include <unordered_map>
 #include <map>
-#include <sys/select.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <string>
 #include <memory>
-#include "Graph.hpp"
-#include "Tree.hpp"
-#include "MSTStrategy.hpp"
-#include "MSTFactory.hpp"
+#include <condition_variable>
+#include "Reactor.hpp"
 
-using namespace std;
-
-enum class EventType
-{
-    READ,
-    WRITE,
-    ACCEPT,
-    CONNECT,
-    DISCONNECT
-};
-
-class Handle
-{
-private:
-    int _fd;
-
+class LFThreadPool {
 public:
-    Handle(int fd) : _fd(fd) {}
-    int getFd() { return _fd; }
-};
-
-class EventHandler
-{
-protected:
-    int _handle;
-    function<void()> _callback;
-
-public:
-    EventHandler(int fd, function<void()> callback) : _handle(fd), _callback(callback) {}
-    virtual ~EventHandler() = default;
-    virtual void handleEvent() = 0;
-    virtual int getHandle() = 0;
-};
-
-class ConcreteEventHandler : public EventHandler
-{
-    public:
-    ConcreteEventHandler(int fd, function<void()> callback) : EventHandler(fd, callback) {}
-    void handleEvent() override { _callback(); }
-    int getHandle() override { return _handle; }
-    
-};
-
-
-class Reactor
-{
-private:
-    fd_set _readFds;
-    int _maxFd;
-    map<int, shared_ptr<EventHandler>> _handlers;
-
-
-public:
-    Reactor() : _maxFd(0)
-    {
-        FD_ZERO(&_readFds);
-        
-    }
-    ~Reactor();
-    int registerHandler(shared_ptr<EventHandler> handler, EventType type);
-    int removeHandler(shared_ptr<EventHandler> handler, EventType type);
-    int handleEvents();
-    int deactivateHandle(int fd, EventType type);
-    int reactivateHandle(int fd, EventType type);
-};
-
-class LFThreadPool
-{
-private:
-    vector<thread> _followers;
-    map<thread::id, atomic<bool>> _followersState;
-    mutex _mx;
-    condition_variable _condition;
-    bool _stop; 
-    shared_ptr<Reactor> _reactor;
-    thread::id _leader;
-    void followerLoop();
-    
-public:
-    LFThreadPool(size_t numThreads, shared_ptr<Reactor> reactor);
+    LFThreadPool(size_t numThreads, std::shared_ptr<Reactor> reactor);
     ~LFThreadPool();
-    void promoteNewLeader();
-    void join();
-    
+
+    void run();  // Start the pool
+    void join(); // Wait for threads to finish
+
+private:
+    void followerLoop();       // The loop each follower runs
+    void promoteNewLeader();   // Promote a new leader
+
+    std::vector<std::thread> _followers;             // The follower threads
+    std::map<std::thread::id, bool> _followersState; // To keep track of the leader/followers
+
+    std::shared_ptr<Reactor> _reactor;
+    std::thread::id _leader;  // The current leader
+    bool _stop;               // Flag to stop the pool
+    std::mutex _mx;           // Mutex for synchronizing access
+    std::condition_variable _condition;  // Condition variable for signaling followers
 };
 
-#endif
+#endif // LFTHREADPOOL_HPP

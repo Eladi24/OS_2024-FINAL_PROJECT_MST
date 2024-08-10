@@ -4,391 +4,203 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <csignal>
-#include <cstring>
-
+#include <iostream>
+#include <memory>
+#include <string.h>
+#include <mutex>
 #include "Graph.hpp"
 #include "Tree.hpp"
+#include "MSTFactory.hpp"
 #include "LFThreadPool.hpp"
+#include "Reactor.hpp"
+#include "ConcreteEventHandler.hpp"
 
 const int port = 4050;
-function<void(int)> signalHandlerLambda;
 int clientNumber = 0;
+std::mutex graphMutex;
 
-void signalHandler(int signum)
-{
-    cout << "Interrupt signal (" << signum << ") received.\n";
-    // Free memory
-    signalHandlerLambda(signum);
+void signalHandler(int signum) {
+    std::cout << "Interrupt signal (" << signum << ") received.\n";
     exit(signum);
 }
 
-void sendResponse(int clientSock, const string &response)
-{
-    if (send(clientSock, response.c_str(), response.size(), 0) < 0)
-    {
-        cerr << "send error" << endl;
+void sendResponse(int clientSock, const std::string &response) {
+    if (send(clientSock, response.c_str(), response.size(), 0) < 0) {
+        std::cerr << "Send error" << std::endl;
     }
 }
 
-int scanGraph(int clientSock, int &n, int &m, stringstream &ss, unique_ptr<Graph> &g, shared_ptr<Reactor> &reactor, int bytesReceived)
-{
+int scanGraph(int clientSock, int &n, int &m, std::stringstream &ss, std::unique_ptr<Graph> &g) {
     char buffer[1024];
-    if (!(ss >> n >> m) || n <= 0 || m < 0)
-    {
-        cerr << "Invalid graph input" << endl;
+    if (!(ss >> n >> m) || n <= 0 || m < 0) {
+        std::cerr << "Invalid graph input" << std::endl;
         return -1;
     }
 
-    g = make_unique<Graph>(n, m);
-    cout << n << " " << m << endl;
-    this_thread::sleep_for(chrono::milliseconds(1));
-    for (int i = 0; i < m; i++)
-    {
+    std::cout << "Creating graph with " << n << " vertices and " << m << " edges." << std::endl;
+
+    g = std::make_unique<Graph>(n, m);
+    for (int i = 0; i < m; i++) {
         int u, v, w;
-        if (!(ss >> u >> v >> w))
-        {
-            if (u < 0 || u > n || v < 0 || v > n || w < 0)
-            {
-                sendResponse(clientSock, "Invalid edge\n");
-                continue;
-            }
+        if (!(ss >> u >> v >> w)) {
             memset(buffer, 0, sizeof(buffer));
-            bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
-            if (bytesReceived <= 0)
-            {
+            int bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
+            if (bytesReceived <= 0) {
                 clientNumber--;
-                if (bytesReceived == 0)
-                {
-                    cout << "Connection closed" << endl;
-                    break;
-                }
-                else
-                {
-                    cerr << "recv error" << endl;
-                }
+                std::cerr << "recv error or connection closed" << std::endl;
+                return -1;
             }
             ss.clear();
             ss.str(buffer);
             ss >> u >> v >> w;
-            // Create new event handler for adding the edge and add it to the reactor
-            shared_ptr<EventHandler> edgeHandler = make_shared<ConcreteEventHandler>(clientSock, [&g, u, v, w]()
-                                                                                     { g->addEdge(u, v, w); });
-            reactor->registerHandler(edgeHandler, EventType::WRITE);
         }
+        std::cout << "Adding edge: " << u << "-" << v << " with weight " << w << std::endl;
+        g->addEdge(u, v, w);
     }
     return 0;
 }
 
-int scanSrcDest(stringstream &ss, int &src, int &dest)
-{
-    if (!(ss >> src >> dest) || src < 0 || dest < 0)
-    {
-        cerr << "Invalid source or destination" << endl;
+int scanSrcDest(std::stringstream &ss, int &src, int &dest) {
+    if (!(ss >> src >> dest) || src < 0 || dest < 0) {
+        std::cerr << "Invalid source or destination input" << std::endl;
         return -1;
     }
-
     return 0;
 }
 
-
-
-void handleCommands(int clientSock, shared_ptr<Reactor> &reactor, unique_ptr<Graph> &g, MSTFactory &factory, unique_ptr<Tree> &mst)
-{
-    cout << "Client socket in handleCommands: " << clientSock << endl;
+void handleCommands(int clientSock, std::unique_ptr<Graph> &g, MSTFactory &factory, std::unique_ptr<Tree> &mst) {
     char buffer[1024];
-    int bytesReceived;
-    cout << "Trying to read command" << endl;
-
-    while (true)
-    {
-        bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
-        if (bytesReceived <= 0)
-        {
+    while (true) {
+        int bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
+        if (bytesReceived <= 0) {
             clientNumber--;
-            if (bytesReceived == 0)
-            {
-                cout << "Connection closed" << endl;
-                break;
-            }
-            else
-            {
-                cerr << "recv error" << endl;
-                continue;
-            }
+            std::cerr << "recv error or connection closed" << std::endl;
+            close(clientSock);
+            return;
         }
         buffer[bytesReceived] = '\0';
-        string command(buffer);
-        if (command.empty())
-            continue;
+        std::string command(buffer);
 
-        stringstream ss(command);
-        string cmd;
-        string response;
+        std::stringstream ss(command);
+        std::string cmd;
         ss >> cmd;
 
-        if (cmd == "Newgraph")
-        {
+        std::lock_guard<std::mutex> lock(graphMutex);
+
+        if (cmd == "Newgraph") {
             int n, m;
-            // Create new event handler and add it to the reactor
-            shared_ptr<EventHandler> graphHandler = make_shared<ConcreteEventHandler>(clientSock, [clientSock, &n, &m, &ss, &g, &reactor, bytesReceived]()
-                                                                                     { scanGraph(clientSock, n, m, ss, g, reactor, bytesReceived); });
-                                                                                      
-            reactor->registerHandler(graphHandler, EventType::WRITE);
+            if (scanGraph(clientSock, n, m, ss, g) == -1) {
+                sendResponse(clientSock, "Invalid graph input\n");
+                continue;
+            }
+            sendResponse(clientSock, "Graph created with " + std::to_string(n) + " vertices and " + std::to_string(m) + " edges.\n");
 
-            // Wait for the graph to be created
-            
-            response = "Graph created with " + to_string(n) + " vertices and " + to_string(m) + " edges.\n";
-        }
-
-        else if (cmd == "Prim")
-        {
-            if (g->getAdj().empty())
-            {
+        } else if (cmd == "Prim") {
+            if (!g || g->getAdj().empty()) {
                 sendResponse(clientSock, "Graph not initialized\n");
                 continue;
             }
-            if (mst != nullptr)
-            {
-                mst.reset();
-                mst = nullptr;
-            }
+            factory.setStrategy(std::make_unique<PrimStrategy>());
+            mst = factory.createMST(g);
+            sendResponse(clientSock, "MST created using Prim's algorithm.\n" + mst->printMST());
 
-            // Create new event handler for setting the strategy and add it to the reactor
-            shared_ptr<EventHandler> primHandler = make_shared<ConcreteEventHandler>(clientSock, [&factory]()
-                                                                                     { factory.setStrategy(std::make_unique<PrimStrategy>()); });
-            reactor->registerHandler(primHandler, EventType::WRITE);
-            shared_ptr<EventHandler> mstHandler = make_shared<ConcreteEventHandler>(clientSock, [&g, &factory, &mst]()
-                                                                                    { mst = factory.createMST(g); });
-            reactor->registerHandler(mstHandler, EventType::WRITE);
-            response = "MST created using Prim's algorithm.\n";
-            shared_ptr<EventHandler> printHandler = make_shared<ConcreteEventHandler>(clientSock, [&mst, &response]()
-                                                                                      { response += mst->printMST(); });
-            reactor->registerHandler(printHandler, EventType::WRITE);
-            this_thread::sleep_for(chrono::milliseconds(1));
-        }
-        else if (cmd == "Kruskal")
-
-        {
-            if (g->getAdj().empty())
-            {
+        } else if (cmd == "Kruskal") {
+            if (!g || g->getAdj().empty()) {
                 sendResponse(clientSock, "Graph not initialized\n");
                 continue;
             }
-            if (mst != nullptr)
-            {
-                mst.reset();
-                mst = nullptr;
-            }
+            factory.setStrategy(std::make_unique<KruskalStrategy>());
+            mst = factory.createMST(g);
+            sendResponse(clientSock, "MST created using Kruskal's algorithm.\n" + mst->printMST());
 
-            // Create new event handler for setting the strategy and add it to the reactor
-            shared_ptr<EventHandler> kruskalHandler = make_shared<ConcreteEventHandler>(clientSock, [&factory]()
-                                                                                        { factory.setStrategy(std::make_unique<KruskalStrategy>()); });
-            reactor->registerHandler(kruskalHandler, EventType::WRITE);
-            // Create new event handler for creating the MST and add it to the reactor
-            shared_ptr<EventHandler> mstHandler = make_shared<ConcreteEventHandler>(clientSock, [&g, &factory, &mst]()
-                                                                                    { mst = factory.createMST(g); });
-            reactor->registerHandler(mstHandler, EventType::WRITE);
-            response = "MST created using Kruskal's algorithm.\n";
-            // Add to the queue the function to print the MST
-            shared_ptr<EventHandler> printHandler = make_shared<ConcreteEventHandler>(clientSock, [&mst, &response]()
-                                                                                      { response += mst->printMST(); });
-            reactor->registerHandler(printHandler, EventType::WRITE);
-            this_thread::sleep_for(chrono::milliseconds(1));
-        }
-
-        else if (cmd == "MSTweight")
-        {
-            if (mst == nullptr)
-            {
+        } else if (cmd == "MSTweight") {
+            if (!mst) {
                 sendResponse(clientSock, "MST not created\n");
                 continue;
             }
-            response = "Total weight of the MST is: ";
+            sendResponse(clientSock, "Total weight of the MST is: " + std::to_string(mst->totalWeight()) + "\n");
 
-            // Create new event handler for computing the weight of the MST and add it to the reactor
-            shared_ptr<EventHandler> weightHandler = make_shared<ConcreteEventHandler>(clientSock, [&mst, &response]()
-                                                                                       { response += to_string(mst->totalWeight()) + "\n"; });
-            reactor->registerHandler(weightHandler, EventType::READ);
-
-            this_thread::sleep_for(chrono::milliseconds(1));
-        }
-
-        else if (cmd == "Shortestpath")
-        {
-            if (mst == nullptr)
-            {
+        } else if (cmd == "Shortestpath") {
+            if (!mst) {
                 sendResponse(clientSock, "MST not created\n");
                 continue;
             }
-
             int src, dest;
-            int res;
-            // Create new event handler for scanning the source and destination and add it to the reactor
-            shared_ptr<EventHandler> shortestPathHandler = make_shared<ConcreteEventHandler>(clientSock, [&ss, &src, &dest, &res]()
-                                                                                             { res = scanSrcDest(ss, src, dest); });
-            this_thread::sleep_for(chrono::milliseconds(1));
+            scanSrcDest(ss, src, dest);
+            sendResponse(clientSock, "Shortest path from " + std::to_string(src) + " to " + std::to_string(dest) + " is: " + std::to_string(mst->shortestPath()) + "\n");
 
-            if (res == -1)
-                continue;
-            response = "Shortest path from " + to_string(src) + " to " + to_string(dest) + " is: ";
-            // Create new event handler for finding the shortest path and add it to the reactor
-            shared_ptr<EventHandler> pathHandler = make_shared<ConcreteEventHandler>(clientSock, [&mst, src, dest, &response]()
-                                                                                     { response += mst->shortestPath(src, dest); });
-            reactor->registerHandler(pathHandler, EventType::READ);
-            this_thread::sleep_for(chrono::milliseconds(1));
-        }
-        else if (cmd == "Longestpath")
-        {
-            if (mst == nullptr)
-            {
-                cerr << "MST not created" << endl;
-                continue;
-            }
-
-            int src, dest;
-            int res;
-            // Create new event handler for scanning the source and destination and add it to the reactor
-            shared_ptr<EventHandler> longestPathHandler = make_shared<ConcreteEventHandler>(clientSock, [&ss, &src, &dest, &res]()
-                                                                                            { res = scanSrcDest(ss, src, dest); });
-            reactor->registerHandler(longestPathHandler, EventType::WRITE);
-            if (res == -1)
-                continue;
-            response = "Longest path from " + to_string(src) + " to " + to_string(dest) + " is: ";
-            // Create new event handler for finding the longest path and add it to the reactor
-            shared_ptr<EventHandler> pathHandler = make_shared<ConcreteEventHandler>(clientSock, [&mst, src, dest, &response]()
-                                                                                     { response += mst->longestPath(src, dest); });
-            reactor->registerHandler(pathHandler, EventType::READ);
-            this_thread::sleep_for(chrono::milliseconds(1));
-        }
-        else if (cmd == "Averdist")
-        {
-            if (mst == nullptr)
-            {
+        } else if (cmd == "Longestpath") {
+            if (!mst) {
                 sendResponse(clientSock, "MST not created\n");
                 continue;
             }
+            int src, dest;
+            scanSrcDest(ss, src, dest);
+            sendResponse(clientSock, "Longest path from " + std::to_string(src) + " to " + std::to_string(dest) + " is: " + std::to_string(mst->diameter()) + "\n");
 
-            response = "Average distance of the MST is: ";
-            // Add to the queue the function to compute the average distance
-            shared_ptr<EventHandler> averageHandler = make_shared<ConcreteEventHandler>(clientSock, [&mst, &response]()
-                                                                                        { response += to_string(mst->averageDistanceEdges()) + "\n"; });
-            reactor->registerHandler(averageHandler, EventType::READ);
+        } else if (cmd == "Averdist") {
+            if (!mst) {
+                sendResponse(clientSock, "MST not created\n");
+                continue;
+            }
+            sendResponse(clientSock, "Average distance in the MST is: " + std::to_string(mst->averageDistanceEdges()) + "\n");
 
-            this_thread::sleep_for(chrono::milliseconds(1));
-        }
-        else if (cmd == "Exit")
-        {
+        } else if (cmd == "Exit") {
             sendResponse(clientSock, "Goodbye\n");
-            cout << "Thread number " << this_thread::get_id() << " exiting" << endl;
-            // Create new event handler for closing the connection and add it to the reactor
-            shared_ptr<EventHandler> closeHandler = make_shared<ConcreteEventHandler>(clientSock, [&clientSock]()
-                                                                                      { close(clientSock); });
-            reactor->registerHandler(closeHandler, EventType::DISCONNECT);
-            reactor->deactivateHandle(clientSock, EventType::DISCONNECT);
+            close(clientSock);
             clientNumber--;
             break;
+
+        } else {
+            sendResponse(clientSock, "Unknown command\n");
         }
-        else
-        {
-            cerr << "Unknown command: " << cmd << endl;
-        }
-        // Create new event handler for sending the response and add it to the reactor
-        shared_ptr<EventHandler> responseHandler = make_shared<ConcreteEventHandler>(clientSock, [&clientSock, &response]()
-                                                                                     { sendResponse(clientSock, response); });
-        reactor->registerHandler(responseHandler, EventType::READ);
     }
 }
 
-void acceptConnection(int server_sock, unique_ptr<Graph> &g, MSTFactory &factory, unique_ptr<Tree> &mst, shared_ptr<Reactor> &reactor)
-{
-    struct sockaddr_in client_addr;
-    socklen_t sin_size = sizeof(client_addr);
-    int client_sock = accept(server_sock, (struct sockaddr *)&client_addr, &sin_size);
-    if (client_sock == -1)
-    {
-        perror("accept");
-        return;
-    }
-    clientNumber++;
-    char s[INET6_ADDRSTRLEN];
-    inet_ntop(client_addr.sin_family, &client_addr.sin_addr, s, sizeof s);
-    cout << "New connection from " << s << " on socket " << client_sock << endl;
-    cout << "Currently " << clientNumber << " clients connected" << endl;
-    cout << "Server socket: " << server_sock << " Client socket: " << client_sock << endl;
-    // Create new event handler for handling the commands and add it to the reactor
-    shared_ptr<EventHandler> commandHandler = make_shared<ConcreteEventHandler>(client_sock, [client_sock, &reactor, &g, &factory, &mst]()
-                                                                                { handleCommands(client_sock, reactor, g, factory, mst); });
-
-    reactor->registerHandler(commandHandler, EventType::READ);
-    cout << "Added command handler to reactor" << endl;
-}
-
-int main()
-{
+int main() {
     signal(SIGINT, signalHandler);
-    shared_ptr<Reactor> reactor = make_shared<Reactor>();
+
+    std::shared_ptr<Reactor> reactor = std::make_shared<Reactor>();
     LFThreadPool pool(10, reactor);
-    unique_ptr<Graph> g;
-    unique_ptr<Tree> t;
-    MSTFactory factory;
-    unique_ptr<thread::id> leader = make_unique<thread::id>(this_thread::get_id());
-    signalHandlerLambda = [&](int signum)
-    {
-        cout << "Freeing memory" << endl;
-        g.reset();
-        t.reset();
-        
-        reactor.reset();
-    };
-    // The server socket
+
     int serverSock;
     struct sockaddr_in serverAddr;
-    // The opt variable is used to set the socket options
     int opt = 1;
 
-    // If the server socket cannot be created, the program will exit
-    if ((serverSock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-    {
-        cerr << "Socket creation error" << endl;
-        exit(1);
-    }
+    serverSock = socket(AF_INET, SOCK_STREAM, 0);
+    setsockopt(serverSock, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
 
-    // If the cannot set the socket to reuse the address, the program will exit
-    if (setsockopt(serverSock, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)))
-    {
-        cerr << "Setsockopt error" << endl;
-        exit(1);
-    }
-
-    // Set the server address
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = INADDR_ANY;
     serverAddr.sin_port = htons(port);
-    memset(&(serverAddr.sin_zero), '\0', 8);
 
-    // If the server cannot bind to the address, the program will exit
-    if (bind(serverSock, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0)
-    {
-        cerr << "Bind error" << endl;
-        exit(1);
-    }
+    bind(serverSock, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
+    listen(serverSock, 10);
 
-    // If the server cannot listen for incoming connections, the program will exit
-    if (listen(serverSock, 10) < 0)
-    {
-        cerr << "Listen error" << endl;
-        exit(1);
-    }
+    std::cout << "Server listening on port " << port << std::endl;
 
-    cout << "MST LF server waiting for requests on port " << port << endl;
-    
-    
-    // Create a new event handler for accepting connections and add it to the reactor
-    shared_ptr<EventHandler> acceptHandler = make_shared<ConcreteEventHandler>(serverSock, [&serverSock, &g, &factory, &t, &reactor]()
-                                                                               { acceptConnection(serverSock, g, factory, t, reactor); });
+    auto g = std::make_unique<Graph>();  // Create a unique_ptr for Graph
+    auto t = std::make_unique<Tree>();   // Create a unique_ptr for Tree
+    MSTFactory factory;
+
+    auto acceptHandler = std::make_shared<ConcreteEventHandler>(
+        serverSock, [&reactor, &g, &t, &factory](int fd) {
+            struct sockaddr_in clientAddr;
+            socklen_t sinSize = sizeof(clientAddr);
+            int clientSock = accept(fd, (struct sockaddr *)&clientAddr, &sinSize);
+            if (clientSock >= 0) {
+                std::cout << "New connection on socket " << clientSock << std::endl;
+
+                std::thread([clientSock, &g, &t, &factory]() {
+                    handleCommands(clientSock, g, factory, t);
+                }).detach();
+            } else {
+                std::cerr << "Error accepting connection on fd: " << fd << std::endl;
+            }
+        }
+    );
 
     reactor->registerHandler(acceptHandler, EventType::ACCEPT);
-    cout << "Thread number " << this_thread::get_id() << " waiting for connections" << endl;
-    
-    return 0;
+
+    pool.run();
 }
