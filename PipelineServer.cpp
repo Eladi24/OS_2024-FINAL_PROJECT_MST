@@ -34,11 +34,10 @@ void executePipeline(vector<unique_ptr<ActiveObject>> &pipeline) {
         stage->enqueue([]{});  // Ensure all tasks are enqueued
     }
 
-    for (auto &stage : pipeline) {
-        // The destructor of `ActiveObject` ensures all tasks complete before joining the thread
-        stage.reset();
-    }
+    // Wait for a short period to ensure tasks have completed
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
 }
+
 
 
 int scanGraph(int &n, int &m, stringstream &ss, unique_ptr<Graph> &g) {
@@ -170,6 +169,16 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
             }
             setupPipeline(pipeline, "Prim");
 
+            // Debug Statements
+            cout << "Pipeline size after setup: " << pipeline.size() << endl;
+            for (size_t i = 0; i < pipeline.size(); ++i) {
+                if (pipeline[i]) {
+                    cout << "pipeline[" << i << "] is initialized." << endl;
+                } else {
+                    cout << "pipeline[" << i << "] is NOT initialized!" << endl;
+                }
+            }
+
             pipeline[0]->enqueue([&factory]() {
                 factory.setStrategy(make_unique<PrimStrategy>());
             });
@@ -191,6 +200,16 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
             }
             setupPipeline(pipeline, "Kruskal");
 
+            // Debug Statements
+            cout << "Pipeline size after setup: " << pipeline.size() << endl;
+            for (size_t i = 0; i < pipeline.size(); ++i) {
+                if (pipeline[i]) {
+                    cout << "pipeline[" << i << "] is initialized." << endl;
+                } else {
+                    cout << "pipeline[" << i << "] is NOT initialized!" << endl;
+                }
+            }
+
             pipeline[0]->enqueue([&factory]() {
                 factory.setStrategy(make_unique<KruskalStrategy>());
             });
@@ -211,6 +230,13 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
                 continue;
             }
 
+            // Debug Statements
+            if (pipeline.size() > 1 && pipeline[1]) {
+                cout << "pipeline[1] is initialized for MSTweight." << endl;
+            } else {
+                cerr << "pipeline[1] is NOT initialized for MSTweight!" << endl;
+            }
+
             string future = "Total weight of the MST is: ";
             pipeline[1]->enqueue([&mst, &future]() {
                 future += to_string(mst->totalWeight()) + "\n";
@@ -221,6 +247,13 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
             if (mst == nullptr) {
                 sendResponse(clientSock, "MST not created\n");
                 continue;
+            }
+
+            // Debug Statements
+            if (pipeline.size() > 2 && pipeline[2]) {
+                cout << "pipeline[2] is initialized for Shortestpath." << endl;
+            } else {
+                cerr << "pipeline[2] is NOT initialized for Shortestpath!" << endl;
             }
 
             string future = "Shortest path in the MST is: ";
@@ -235,6 +268,13 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
                 continue;
             }
 
+            // Debug Statements
+            if (pipeline.size() > 3 && pipeline[3]) {
+                cout << "pipeline[3] is initialized for Longestpath." << endl;
+            } else {
+                cerr << "pipeline[3] is NOT initialized for Longestpath!" << endl;
+            }
+
             string future = "Longest path in the MST is: ";
             pipeline[3]->enqueue([&mst, &future]() {
                 future += to_string(mst->diameter()) + "\n";
@@ -245,6 +285,13 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
             if (mst == nullptr) {
                 sendResponse(clientSock, "MST not created\n");
                 continue;
+            }
+
+            // Debug Statements
+            if (pipeline.size() > 4 && pipeline[4]) {
+                cout << "pipeline[4] is initialized for Averdist." << endl;
+            } else {
+                cerr << "pipeline[4] is NOT initialized for Averdist!" << endl;
             }
 
             string future = "Average distance in the MST is: ";
