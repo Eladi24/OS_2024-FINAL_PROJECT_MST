@@ -1,5 +1,6 @@
 #include "Tree.hpp"
 #include <climits>
+#include <iomanip>  // for std::setw
 
 void Tree::init(vector<Edge> edges) {
     V = edges.size() + 1;
@@ -119,18 +120,6 @@ float Tree::averageDistanceEdges() {
     return static_cast<float>(total) / count;
 }
 
-int Tree::shortestPath() {
-    floydWarshall();
-    int shortest = INT_MAX;
-    for (int i = 0; i < V; i++) {
-        for (int j = i + 1; j < V; j++) {
-            if (distanceMap[i][j] != INT_MAX && distanceMap[i][j] < shortest) {
-                shortest = distanceMap[i][j];
-            }
-        }
-    }
-    return shortest;
-}
 
 void Tree::addEdge(int u, int v, int w) {
     if (u < 0 || u > V || v < 0 || v > V) {
@@ -157,24 +146,54 @@ void Tree::removeEdge(int u, int v) {
 
 string Tree::printMST() {
     vector<bool> visited(V, false);
-    return printMST(0, -1, 0, visited) + "\n";
+    string header = "\nMinimum Spanning Tree (MST):\n";
+    header += "------------------------------------\n";
+    header += "Node 1 -- Node 2 (Weight)\n";
+    header += "------------------------------------\n";
+    return header + printMST(0, -1, visited) + "\n";
 }
 
-string Tree::printMST(int node, int parent, int level, vector<bool> &visited) {
+string Tree::printMST(int node, int parent, vector<bool> &visited) {
     string result;
     visited[node] = true;
 
     for (auto& edge : adj[node]) {
         if (!visited[edge.dest - 1]) {
-            for (int i = 0; i < level; i++) {
-                result += "  ";
-            }
-            result += to_string(node + 1) + " - " + to_string(edge.dest) + " (" + to_string(edge.weight) + ")\n";
-            result += printMST(edge.dest - 1, node, level + 1, visited);
+            result += to_string(node + 1) + " -- " + to_string(edge.dest) + " (" + to_string(edge.weight) + ")\n";
+            result += printMST(edge.dest - 1, node, visited);
         }
     }
     return result;
 }
+
+std::pair<int, std::string> Tree::shortestPath() {
+    floydWarshall();
+
+    int shortest = INT_MAX;
+    int start = -1;
+    int end = -1;
+
+    for (int i = 0; i < V; i++) {
+        for (int j = i + 1; j < V; j++) {
+            if (distanceMap[i][j] != INT_MAX && distanceMap[i][j] < shortest) {
+                shortest = distanceMap[i][j];
+                start = i + 1;  // Convert back to 1-based indexing
+                end = j + 1;
+            }
+        }
+    }
+
+    if (start == -1 || end == -1) {
+        return {INT_MAX, "No path"};
+    }
+
+    std::vector<int> parentTrack(V, -1);
+    dijkstra(start, parentTrack);  // Populate parentTrack for the shortest path
+
+    std::string path = reconstructPath(start, end, parentTrack);
+    return {shortest, path};
+}
+
 
 int Tree::diameter() {
     auto bfs = [&](int start) {

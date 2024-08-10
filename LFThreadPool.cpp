@@ -11,7 +11,7 @@ LFThreadPool::LFThreadPool(size_t numThreads, std::shared_ptr<Reactor> reactor)
 }
 
 LFThreadPool::~LFThreadPool() {
-    std::cout << "LFThreadPool destructor" << std::endl;
+    //std::cout << "LFThreadPool destructor" << std::endl;
     {
         std::unique_lock<std::mutex> lock(_mx);
         _stop = true;
@@ -23,7 +23,7 @@ LFThreadPool::~LFThreadPool() {
 void LFThreadPool::promoteNewLeader() {
     for (auto &follower : _followers) {
         if (follower.get_id() != _leader && !_followersState[follower.get_id()]) {
-            std::cout << "Promoting new leader: " << follower.get_id() << std::endl;
+            //std::cout << "Promoting new leader: " << follower.get_id() << std::endl;
             _leader = follower.get_id();
             _followersState[_leader] = true;
             _condition.notify_one();
@@ -41,7 +41,7 @@ void LFThreadPool::join() {
 }
 
 void LFThreadPool::followerLoop() {
-    std::cout << "Follower thread " << std::this_thread::get_id() << " started" << std::endl;
+    //std::cout << "Follower thread " << std::this_thread::get_id() << " started" << std::endl;
     while (true) {
         std::unique_lock<std::mutex> lock(_mx);
 
@@ -68,7 +68,7 @@ void LFThreadPool::run() {
             if (_stop) break;
         }
 
-        std::cout << "Leader thread " << _leader << " handling events" << std::endl;
+        //std::cout << "Leader thread " << _leader << " handling events" << std::endl;
         _reactor->handleEvents();
 
         _followersState[_leader] = false;

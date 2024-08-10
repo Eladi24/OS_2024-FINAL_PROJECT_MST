@@ -21,17 +21,17 @@ int Reactor::registerHandler(std::shared_ptr<EventHandler> handler, EventType ty
     int fd = handler->getHandle();
     if (type == EventType::READ) {
         FD_SET(fd, &_readFds);
-        std::cout << "Registered fd " << fd << " for READ events." << std::endl;
+        //std::cout << "Registered fd " << fd << " for READ events." << std::endl;
     } else if (type == EventType::WRITE) {
         FD_SET(fd, &_writeFds);
-        std::cout << "Registered fd " << fd << " for WRITE events." << std::endl;
+        //std::cout << "Registered fd " << fd << " for WRITE events." << std::endl;
     } else if (type == EventType::ACCEPT) {
         FD_SET(fd, &_readFds);
-        std::cout << "Registered fd " << fd << " for ACCEPT events." << std::endl;
+        //std::cout << "Registered fd " << fd << " for ACCEPT events." << std::endl;
     }
     _handlers[fd] = std::move(handler);
     _maxFd = std::max(_maxFd, fd);
-    std::cout << "New maxFd is " << _maxFd << std::endl;
+    //std::cout << "New maxFd is " << _maxFd << std::endl;
     return 0;
 }
 
@@ -66,7 +66,7 @@ int Reactor::handleEvents() {
     timeout.tv_usec = 0;
 
     // Debugging statement
-    std::cout << "Before select, maxFd: " << _maxFd << std::endl;
+    //std::cout << "Before select, maxFd: " << _maxFd << std::endl;
 
     int activity = select(_maxFd + 1, &tempReadFds, &tempWriteFds, nullptr, &timeout);
 
@@ -76,20 +76,20 @@ int Reactor::handleEvents() {
     }
 
     if (activity == 0) {
-        std::cout << "select() timeout, no events" << std::endl;
+        //std::cout << "select() timeout, no events" << std::endl;
         return 0; // Timeout, no events
     }
 
     for (int fd = 0; fd <= _maxFd; ++fd) {
         if (FD_ISSET(fd, &tempReadFds)) {
-            std::cout << "Event detected on fd: " << fd << std::endl;
+            //std::cout << "Event detected on fd: " << fd << std::endl;
             std::lock_guard<std::mutex> lock(_mutex);
             if (_handlers.find(fd) != _handlers.end()) {
                 _handlers[fd]->handleEvent();
             }
         }
         if (FD_ISSET(fd, &tempWriteFds)) {
-            std::cout << "Write event detected on fd: " << fd << std::endl;
+            //std::cout << "Write event detected on fd: " << fd << std::endl;
             std::lock_guard<std::mutex> lock(_mutex);
             if (_handlers.find(fd) != _handlers.end()) {
                 _handlers[fd]->handleEvent();

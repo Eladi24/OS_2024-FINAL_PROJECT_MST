@@ -17,13 +17,20 @@ public:
     void init(vector<Edge> edges);
     int totalWeight();
     float averageDistanceEdges();
-    int shortestPath(); // Method for calculating the shortest path in the MST
+
+    
+    // Method for calculating the shortest path in the MST
     int diameter(); // Method for calculating the diameter of the MST
     void addEdge(int u, int v, int w);
     void removeEdge(int u, int v);
     string printMST();
+    string printMST(int node, int parent, vector<bool> &visited);
+    std::pair<int, std::string> shortestPath();
     int getVerticesNumber() const { return V; }
-    const vector<vector<Edge>>& getAdj() const { return adj; }
+    const vector<vector<Edge>>& getAdj() const { return adj; 
+    }
+    
+
 
 private:
     int V; // Number of vertices
@@ -35,7 +42,6 @@ private:
     void dfs(int node, int parent, vector<int> &dist, vector<int> &parentTrack);
     void floydWarshall();
     string reconstructPath(int src, int dest, const vector<int> &parentTrack);
-    string printMST(int node, int parent, int level, vector<bool> &visited);
-};
+};  
 
 #endif // TREE_HPP

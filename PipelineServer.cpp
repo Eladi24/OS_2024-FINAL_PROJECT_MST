@@ -24,7 +24,7 @@ function<void(int)> signalHandlerLambda;
 int clientNumber = 0;
 
 void signalHandler(int signum) {
-    cout << "Interrupt signal (" << signum << ") received.\n";
+    cout << "\nInterrupt signal (" << signum << ") received.\n";
     // Free memory
     signalHandlerLambda(signum);
     exit(signum);
@@ -243,26 +243,41 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
             });
             executePipeline(pipeline);
             sendResponse(clientSock, future);
-        } else if (cmd == "Shortestpath") {
-            if (mst == nullptr) {
-                sendResponse(clientSock, "MST not created\n");
-                continue;
-            }
+       } else if (cmd == "Shortestpath") {
+    if (mst == nullptr) {
+        sendResponse(clientSock, "MST not created\n");
+        continue;
+    }
 
-            // Debug Statements
-            if (pipeline.size() > 2 && pipeline[2]) {
-                cout << "pipeline[2] is initialized for Shortestpath." << endl;
-            } else {
-                cerr << "pipeline[2] is NOT initialized for Shortestpath!" << endl;
-            }
+    // Debug Statements
+    if (pipeline.size() > 2 && pipeline[2]) {
+        cout << "pipeline[2] is initialized for Shortestpath." << endl;
+    } else {
+        cerr << "pipeline[2] is NOT initialized for Shortestpath!" << endl;
+    }
 
-            string future = "Shortest path in the MST is: ";
-            pipeline[2]->enqueue([&mst, &future]() {
-                future += to_string(mst->shortestPath()) + "\n";
-            });
-            executePipeline(pipeline);
-            sendResponse(clientSock, future);
-        } else if (cmd == "Longestpath") {
+    // Prepare the future result for the shortest path and its corresponding path
+    string future;
+    int shortestDistance;
+    string shortestPath;
+
+    // Enqueue tasks to calculate the shortest path
+    pipeline[2]->enqueue([&mst, &shortestDistance, &shortestPath]() {
+        auto result = mst->shortestPath(); // Get the shortest distance and path
+        shortestDistance = result.first;
+        shortestPath = result.second;
+    });
+
+    // Execute the pipeline and wait for the result
+    executePipeline(pipeline);
+
+    // Formulate the response
+    future = "Shortest path in the MST is: " + shortestPath + " with distance: " + to_string(shortestDistance) + "\n";
+    
+    // Send the response to the client
+    sendResponse(clientSock, future);
+}
+ else if (cmd == "Longestpath") {
             if (mst == nullptr) {
                 sendResponse(clientSock, "MST not created\n");
                 continue;

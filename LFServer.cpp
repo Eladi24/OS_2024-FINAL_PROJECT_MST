@@ -14,13 +14,14 @@
 #include "LFThreadPool.hpp"
 #include "Reactor.hpp"
 #include "ConcreteEventHandler.hpp"
+#include <climits>
 
 const int port = 4050;
 int clientNumber = 0;
 std::mutex graphMutex;
 
 void signalHandler(int signum) {
-    std::cout << "Interrupt signal (" << signum << ") received.\n";
+    std::cout << "\nInterrupt signal (" << signum << ") received.\n";
     exit(signum);
 }
 
@@ -47,7 +48,7 @@ int scanGraph(int clientSock, int &n, int &m, std::stringstream &ss, std::unique
             int bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
             if (bytesReceived <= 0) {
                 clientNumber--;
-                std::cerr << "recv error or connection closed" << std::endl;
+                std::cerr << "connection closed" << std::endl;
                 return -1;
             }
             ss.clear();
@@ -120,25 +121,36 @@ void handleCommands(int clientSock, std::unique_ptr<Graph> &g, MSTFactory &facto
             }
             sendResponse(clientSock, "Total weight of the MST is: " + std::to_string(mst->totalWeight()) + "\n");
 
-        } else if (cmd == "Shortestpath") {
-            if (!mst) {
-                sendResponse(clientSock, "MST not created\n");
-                continue;
-            }
-            int src, dest;
-            scanSrcDest(ss, src, dest);
-            sendResponse(clientSock, "Shortest path from " + std::to_string(src) + " to " + std::to_string(dest) + " is: " + std::to_string(mst->shortestPath()) + "\n");
+     } else if (cmd == "Shortestpath") {
+           if (!mst) {
+        sendResponse(clientSock, "MST not created\n");
+        continue;
+    }
+
+    auto result = mst->shortestPath();
+    int shortestDistance = result.first;
+    std::string shortestPath = result.second;
+
+    sendResponse(clientSock, "Shortest path in MST is: " + shortestPath + " with distance: " + std::to_string(shortestDistance) + "\n");
 
         } else if (cmd == "Longestpath") {
-            if (!mst) {
-                sendResponse(clientSock, "MST not created\n");
-                continue;
-            }
-            int src, dest;
-            scanSrcDest(ss, src, dest);
-            sendResponse(clientSock, "Longest path from " + std::to_string(src) + " to " + std::to_string(dest) + " is: " + std::to_string(mst->diameter()) + "\n");
+    if (!mst) {
+        sendResponse(clientSock, "MST not created\n");
+        continue;
+    }
 
-        } else if (cmd == "Averdist") {
+    // Get the diameter and the path
+    int longestDistance = mst->diameter();
+
+    if (longestDistance == INT_MAX) {
+        sendResponse(clientSock, "Error: \n");
+    } else {
+        // Send the response with both the length of the longest path and the actual path
+        sendResponse(clientSock, "Longest path in the MST is: " + std::to_string(longestDistance) + 
+                     "\n");
+    }
+}
+else if (cmd == "Averdist") {
             if (!mst) {
                 sendResponse(clientSock, "MST not created\n");
                 continue;
