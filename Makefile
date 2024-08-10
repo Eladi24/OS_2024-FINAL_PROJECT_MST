@@ -41,3 +41,16 @@ MSTFactory.o: MSTFactory.cpp
 
 clean:
 	rm -f *.o PipelineServer LFServer libTree.so
+
+valgrind-lfserver: LFServer
+	valgrind --leak-check=full --track-origins=yes --show-reachable=yes ./LFServer
+
+helgrind-lfserver: LFServer
+	valgrind --tool=helgrind ./LFServer
+
+
+valgrind-pipelineserver: PipelineServer
+	valgrind --leak-check=full --track-origins=yes --show-reachable=yes ./PipelineServer
+
+helgrind-pipelineserver: PipelineServer
+	valgrind --tool=helgrind ./PipelineServer
