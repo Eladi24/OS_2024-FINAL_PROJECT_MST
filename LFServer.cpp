@@ -1,4 +1,4 @@
- #include <unistd.h>
+#include <unistd.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -8,6 +8,7 @@
 #include <memory>
 #include <string.h>
 #include <mutex>
+#include <vector>
 #include "Graph.hpp"
 #include "Tree.hpp"
 #include "MSTFactory.hpp"
@@ -23,12 +24,47 @@ std::mutex treeMutex;  // Mutex to protect Tree access
 std::mutex clientNumberMutex; // Mutex to protect clientNumber access
 std::mutex coutMutex;  // Mutex to protect std::cout
 std::mutex cerrMutex;  // Mutex to protect std::cerr
+std::shared_ptr<Reactor> reactor;
+std::unique_ptr<LFThreadPool> pool;
+std::vector<std::thread> threads;
+
+int serverSock;
 
 void signalHandler(int signum) {
     {
         std::lock_guard<std::mutex> lock(coutMutex);
         std::cout << "\nInterrupt signal (" << signum << ") received.\n";
     }
+
+    // Stop reactor
+    if (reactor) {
+        reactor->stop();
+    }
+
+    // Stop thread pool
+    if (pool) {
+        pool->stop();
+    }
+
+    // Join all threads before exiting
+    for (auto &t : threads) {
+        if (t.joinable()) {
+            t.join();
+        }
+    }
+
+    // Explicitly reset shared pointers to ensure cleanup
+    reactor.reset();
+    pool.reset();
+    //acceptHandler.reset();  // Reset the ConcreteEventHandler shared pointer
+
+    // Close server socket
+    if (serverSock >= 0) {
+        close(serverSock);
+        serverSock = -1;
+    }
+
+    // Exit the program
     exit(signum);
 }
 
@@ -238,20 +274,19 @@ void handleCommands(int clientSock, std::shared_ptr<Graph> &g, MSTFactory &facto
     }
 }
 
-
+  auto g = std::make_shared<Graph>();
+    auto t = std::make_shared<Tree>();
 int main() {
     signal(SIGINT, signalHandler);
 
-    std::shared_ptr<Reactor> reactor = std::make_shared<Reactor>();
-    LFThreadPool pool(10, reactor);
-
-    int serverSock;
-    struct sockaddr_in serverAddr;
-    int opt = 1;
+    reactor = std::make_shared<Reactor>();
+    pool = std::make_unique<LFThreadPool>(10, reactor);
 
     serverSock = socket(AF_INET, SOCK_STREAM, 0);
+    int opt = 1;
     setsockopt(serverSock, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
 
+    struct sockaddr_in serverAddr;
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = INADDR_ANY;
     serverAddr.sin_port = htons(port);
@@ -269,7 +304,7 @@ int main() {
     MSTFactory factory;
 
     auto acceptHandler = std::make_shared<ConcreteEventHandler>(
-        serverSock, [&reactor, &g, &t, &factory](int fd) {
+        serverSock, [&, factoryPtr = &factory](int fd) mutable {
             struct sockaddr_in clientAddr;
             socklen_t sinSize = sizeof(clientAddr);
             int clientSock = accept(fd, (struct sockaddr *)&clientAddr, &sinSize);
@@ -279,9 +314,10 @@ int main() {
                     std::cout << "New connection on socket " << clientSock << std::endl;
                 }
 
-                std::thread([clientSock, &g, &t, &factory]() {
-                    handleCommands(clientSock, g, factory, t);
-                }).detach();
+                // Create a thread and store it for later joining
+                threads.emplace_back([clientSock, &g, &t, factoryPtr]() mutable {
+                    handleCommands(clientSock, g, *factoryPtr, t);
+                });
             } else {
                 std::lock_guard<std::mutex> lock(cerrMutex);
                 std::cerr << "Error accepting connection on fd: " << fd << std::endl;
@@ -290,6 +326,13 @@ int main() {
     );
 
     reactor->registerHandler(acceptHandler, EventType::ACCEPT);
+    
+    pool->run();
+acceptHandler.reset();
 
-    pool.run();
+    // Clean up before exiting
+    signalHandler(SIGINT);  // Mimic signal handling to clean up resources
+t.reset();
+g.reset();
+    return 0;
 }

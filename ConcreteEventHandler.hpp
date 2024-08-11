@@ -19,7 +19,7 @@ public:
 
 private:
     int _fd;
-    std::function<void(int)> _callback;  // Pass fd to callback
+    std::function<void(int)> _callback;  // Callback that handles the event
 };
 
 #endif // CONCRETEEVENTHANDLER_HPP

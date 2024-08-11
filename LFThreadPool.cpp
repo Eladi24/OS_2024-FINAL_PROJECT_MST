@@ -25,8 +25,11 @@ void LFThreadPool::run() {
 }
 
 void LFThreadPool::stop() {
-    running = false; // Set the running flag to false to stop the loop
-    reactor->notifyAll(); // Ensure all threads are woken up to exit
+    {
+        std::lock_guard<std::mutex> lock(queueMutex);
+        running = false; // Set the running flag to false to stop the loop
+        reactor->notifyAll(); // Ensure all threads are woken up to exit
+    }
 
     for (auto &worker : workers) {
         if (worker.joinable()) {
@@ -34,6 +37,7 @@ void LFThreadPool::stop() {
         }
     }
 }
+
 
 void LFThreadPool::workerThread() {
     while (running) {

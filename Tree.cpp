@@ -2,33 +2,33 @@
 #include <climits>
 #include <iomanip>
 #include <mutex>
+#include <iostream>
 
 // Mutex to protect the Tree's state
 std::mutex treeMutex;
 
+// Global mutexes to protect std::cout and std::cerr
+
+
 void Tree::init(vector<Edge> edges) {
     {
-        //std::lock_guard<std::mutex> lock(treeMutex); // Protect the modification of V and E
+        std::lock_guard<std::mutex> lock(treeMutex);
         V = edges.size() + 1;
         E = 0;
         adj.resize(V);
     }
     
-    // Lock only during modifications to the adjacency list
     for (const Edge& e : edges) {
         {
-            //std::lock_guard<std::mutex> lock(treeMutex);
-            adj[e.src - 1].push_back(e);  // Add edges directly without using addEdge()
+            std::lock_guard<std::mutex> lock(treeMutex);
+            adj[e.src - 1].push_back(e);
             adj[e.dest - 1].push_back({e.dest, e.src, e.weight});
             E++;
         }
     }
 }
 
-
 int Tree::totalWeight() {
-    //std::lock_guard<std::mutex> lock(treeMutex);
-
     int total = 0;
     for (int i = 0; i < V; i++) {
         for (Edge e : adj[i]) {
@@ -148,14 +148,17 @@ void Tree::addEdge(int u, int v, int w) {
     std::lock_guard<std::mutex> lock(treeMutex);
 
     if (u < 0 || u > V || v < 0 || v > V) {
+      
         cerr << "Invalid edge, vertices must be between 1 and " << V << endl;
         exit(1);
     }
     if (u == v) {
+        
         cerr << "Invalid edge, vertices must be different" << endl;
         exit(1);
     }
     if (E >= V - 1) {
+       
         cerr << "Invalid edge, number of edges must be V - 1 by definition" << endl;
         exit(1);
     }
@@ -211,7 +214,7 @@ std::pair<int, std::string> Tree::shortestPath() {
         for (int j = i + 1; j < V; j++) {
             if (distanceMap[i][j] != INT_MAX && distanceMap[i][j] < shortest) {
                 shortest = distanceMap[i][j];
-                start = i + 1;  // Convert back to 1-based indexing
+                start = i + 1;
                 end = j + 1;
             }
         }
@@ -257,4 +260,14 @@ int Tree::diameter() {
     auto p2 = bfs(p1.first);
 
     return p2.second;
+}
+
+void Tree::clear() {
+    std::lock_guard<std::mutex> lock(treeMutex);
+    adj.clear();
+    distanceMap.clear();
+}
+
+Tree::~Tree() {
+    clear();  // Explicitly clear vectors to free memory
 }

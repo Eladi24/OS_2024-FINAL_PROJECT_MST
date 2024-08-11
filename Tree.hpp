@@ -17,10 +17,11 @@ public:
     void init(vector<Edge> edges);
     int totalWeight();
     float averageDistanceEdges();
-
+    ~Tree();  // Destructor declaration
     
     // Method for calculating the shortest path in the MST
     int diameter(); // Method for calculating the diameter of the MST
+    void clear();
     void addEdge(int u, int v, int w);
     void removeEdge(int u, int v);
     string printMST();
