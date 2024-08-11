@@ -2,6 +2,12 @@
 #include <climits>
 #include <algorithm>
 #include <iostream>
+#include <mutex>
+
+// Global mutex to protect access to the Graph
+std::mutex graphMutex;
+std::mutex coutMutex;
+
 
 // PrimStrategy implementation
 
@@ -17,6 +23,8 @@ int PrimStrategy::minKey(const std::vector<int>& key, const std::vector<char>& m
 }
 
 std::vector<Edge> PrimStrategy::findMST(const Graph& g) {
+    std::lock_guard<std::mutex> lock(graphMutex);  // Protect access to the Graph
+
     int V = g.getVerticesNumber();
     std::vector<Edge> result;
     std::vector<int> parent(V, -1); // Array to store the constructed MST
@@ -89,6 +97,8 @@ void DSU::unite(int x, int y) {
 }
 
 std::vector<Edge> KruskalStrategy::findMST(const Graph& g) {
+    std::lock_guard<std::mutex> lock(graphMutex);  // Protect access to the Graph
+
     int V = g.getVerticesNumber();
     std::vector<Edge> result;
     int e = 0; // Number of edges in the MST
@@ -126,9 +136,10 @@ std::vector<Edge> KruskalStrategy::findMST(const Graph& g) {
     }
 
     // Print the MST
+    std::lock_guard<std::mutex> coutLock(coutMutex);  // Protect cout access
     std::cout << "Edges in the constructed MST\n";
     for (const auto& edge : result) {
         std::cout << edge.src << " -- " << edge.dest << " == " << edge.weight << std::endl;
     }
-    return result; // Ensure the function returns the result
+    return result;
 }

@@ -55,7 +55,8 @@
         "sstream": "cpp",
         "stop_token": "cpp",
         "thread": "cpp",
-        "map": "cpp"
+        "map": "cpp",
+        "iomanip": "cpp"
     },
     "makefile.launchConfigurations": [
         {

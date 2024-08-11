@@ -10,17 +10,18 @@
 
 class ActiveObject {
 public:
-    ActiveObject();
-    ~ActiveObject();
-    void enqueue(std::function<void()> task);
+    ActiveObject();  // Constructor
+    ~ActiveObject();  // Destructor
+    void enqueue(std::function<void()> task);  // Method to add tasks to the queue
 
 private:
-    void run();
-    std::thread _worker;
-    std::queue<std::function<void()>> _tasks;
-    std::mutex _mx;
-    std::condition_variable _cv;
-    bool _done;
+    void run();  // The function that the thread runs
+
+    std::thread _worker;  // Thread to run tasks
+    std::queue<std::function<void()>> _tasks;  // Task queue
+    std::mutex _mx;  // Mutex for synchronizing access to the task queue
+    std::condition_variable _cv;  // Condition variable to signal task availability
+    bool _done;  // Flag to indicate whether the ActiveObject should stop
 };
 
 #endif // ACTIVE_OBJECT_HPP
