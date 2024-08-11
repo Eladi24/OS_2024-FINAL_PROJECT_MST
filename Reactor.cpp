@@ -6,6 +6,7 @@ Reactor::Reactor() {
     FD_ZERO(&_readFds);
     FD_ZERO(&_writeFds);
     _maxFd = 0;
+    running = true; // Initialize running flag
 }
 
 Reactor::~Reactor() {
@@ -18,57 +19,37 @@ Reactor::~Reactor() {
 }
 
 int Reactor::registerHandler(std::shared_ptr<EventHandler> handler, EventType type) {
+    std::lock_guard<std::mutex> lock(_mutex);  // Lock the mutex
     int fd = handler->getHandle();
     if (type == EventType::READ) {
         FD_SET(fd, &_readFds);
-        //std::cout << "Registered fd " << fd << " for READ events." << std::endl;
     } else if (type == EventType::WRITE) {
         FD_SET(fd, &_writeFds);
-        //std::cout << "Registered fd " << fd << " for WRITE events." << std::endl;
     } else if (type == EventType::ACCEPT) {
         FD_SET(fd, &_readFds);
-        //std::cout << "Registered fd " << fd << " for ACCEPT events." << std::endl;
     }
     _handlers[fd] = std::move(handler);
-    _maxFd = std::max(_maxFd, fd);
-    //std::cout << "New maxFd is " << _maxFd << std::endl;
-    return 0;
-}
-
-
-int Reactor::removeHandler(std::shared_ptr<EventHandler> handler, EventType type) {
-    std::lock_guard<std::mutex> lock(_mutex);
-    int fd = handler->getHandle();
-    if (type == EventType::READ) {
-        FD_CLR(fd, &_readFds);
-    } else if (type == EventType::WRITE) {
-        FD_CLR(fd, &_writeFds);
-    }
-    _handlers.erase(fd);
+    _maxFd = std::max(_maxFd, fd);  // Update _maxFd inside the mutex
     return 0;
 }
 
 int Reactor::handleEvents() {
     fd_set tempReadFds;
     fd_set tempWriteFds;
-
-    FD_ZERO(&tempReadFds);
-    FD_ZERO(&tempWriteFds);
+    int maxFd;
 
     {
-        std::lock_guard<std::mutex> lock(_mutex);
+        std::lock_guard<std::mutex> lock(_mutex);  // Lock the mutex
         tempReadFds = _readFds;
         tempWriteFds = _writeFds;
+        maxFd = _maxFd;
     }
 
     struct timeval timeout;
     timeout.tv_sec = 5;  // 5-second timeout
     timeout.tv_usec = 0;
 
-    // Debugging statement
-    //std::cout << "Before select, maxFd: " << _maxFd << std::endl;
-
-    int activity = select(_maxFd + 1, &tempReadFds, &tempWriteFds, nullptr, &timeout);
+    int activity = select(maxFd + 1, &tempReadFds, &tempWriteFds, nullptr, &timeout);
 
     if (activity < 0 && errno != EINTR) {
         std::cerr << "select error" << std::endl;
@@ -76,24 +57,20 @@ int Reactor::handleEvents() {
     }
 
     if (activity == 0) {
-        //std::cout << "select() timeout, no events" << std::endl;
         return 0; // Timeout, no events
     }
 
-    for (int fd = 0; fd <= _maxFd; ++fd) {
-        if (FD_ISSET(fd, &tempReadFds)) {
-            //std::cout << "Event detected on fd: " << fd << std::endl;
-            std::lock_guard<std::mutex> lock(_mutex);
-            if (_handlers.find(fd) != _handlers.end()) {
-                _handlers[fd]->handleEvent();
+    for (int fd = 0; fd <= maxFd; ++fd) {  // Use the local maxFd copy
+        if (FD_ISSET(fd, &tempReadFds) || FD_ISSET(fd, &tempWriteFds)) {
+            std::shared_ptr<EventHandler> handler;
+            {
+                std::lock_guard<std::mutex> lock(_mutex);
+                if (_handlers.find(fd) != _handlers.end()) {
+                    handler = _handlers[fd];
+                }
             }
-        }
-        if (FD_ISSET(fd, &tempWriteFds)) {
-            //std::cout << "Write event detected on fd: " << fd << std::endl;
-            std::lock_guard<std::mutex> lock(_mutex);
-            if (_handlers.find(fd) != _handlers.end()) {
-                _handlers[fd]->handleEvent();
-                deactivateHandle(fd, EventType::WRITE);
+            if (handler) {
+                handler->handleEvent();
             }
         }
     }
@@ -101,10 +78,29 @@ int Reactor::handleEvents() {
     return 0;
 }
 
+int Reactor::removeHandler(std::shared_ptr<EventHandler> handler, EventType type) {
+    std::lock_guard<std::mutex> lock(_mutex);  // Lock the mutex
+    int fd = handler->getHandle();
+    if (type == EventType::READ) {
+        FD_CLR(fd, &_readFds);
+    } else if (type == EventType::WRITE) {
+        FD_CLR(fd, &_writeFds);
+    }
+    _handlers.erase(fd);
 
+    // Recalculate _maxFd if necessary
+    if (fd == _maxFd) {
+        _maxFd = 0; // Reset _maxFd
+        for (const auto& h : _handlers) {
+            _maxFd = std::max(_maxFd, h.first);
+        }
+    }
+
+    return 0;
+}
 
 int Reactor::deactivateHandle(int fd, EventType type) {
-    std::lock_guard<std::mutex> lock(_mutex);
+    std::lock_guard<std::mutex> lock(_mutex);  // Lock the mutex
     if (type == EventType::READ) {
         FD_CLR(fd, &_readFds);
     } else if (type == EventType::WRITE) {
@@ -114,7 +110,7 @@ int Reactor::deactivateHandle(int fd, EventType type) {
 }
 
 int Reactor::reactivateHandle(int fd, EventType type) {
-    std::lock_guard<std::mutex> lock(_mutex);
+    std::lock_guard<std::mutex> lock(_mutex);  // Lock the mutex
     if (type == EventType::READ) {
         FD_SET(fd, &_readFds);
     } else if (type == EventType::WRITE) {
@@ -122,4 +118,16 @@ int Reactor::reactivateHandle(int fd, EventType type) {
     }
     _maxFd = std::max(_maxFd, fd);
     return 0;
+}
+
+void Reactor::notifyAll() {
+    cv.notify_all(); // Notify all threads waiting on the condition variable
+}
+
+void Reactor::stop() {
+    {
+        std::lock_guard<std::mutex> lock(_mutex);  // Lock the mutex
+        running = false; // Set the running flag to false
+    }
+    notifyAll(); // Wake up the event handling loop
 }

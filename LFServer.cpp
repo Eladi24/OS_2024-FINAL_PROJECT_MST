@@ -1,4 +1,4 @@
-#include <unistd.h>
+ #include <unistd.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -18,75 +18,127 @@
 
 const int port = 4050;
 int clientNumber = 0;
-std::mutex graphMutex;
+std::mutex graphMutex; // Mutex to protect Graph access
+std::mutex treeMutex;  // Mutex to protect Tree access
+std::mutex clientNumberMutex; // Mutex to protect clientNumber access
+std::mutex coutMutex;  // Mutex to protect std::cout
+std::mutex cerrMutex;  // Mutex to protect std::cerr
 
 void signalHandler(int signum) {
-    std::cout << "\nInterrupt signal (" << signum << ") received.\n";
+    {
+        std::lock_guard<std::mutex> lock(coutMutex);
+        std::cout << "\nInterrupt signal (" << signum << ") received.\n";
+    }
     exit(signum);
 }
 
 void sendResponse(int clientSock, const std::string &response) {
     if (send(clientSock, response.c_str(), response.size(), 0) < 0) {
+        std::lock_guard<std::mutex> lock(cerrMutex);
         std::cerr << "Send error" << std::endl;
     }
 }
 
-int scanGraph(int clientSock, int &n, int &m, std::stringstream &ss, std::unique_ptr<Graph> &g) {
-    char buffer[1024];
+int scanGraph(int clientSock, int &n, int &m, std::stringstream &ss, std::shared_ptr<Graph> &g) {
     if (!(ss >> n >> m) || n <= 0 || m < 0) {
+        std::lock_guard<std::mutex> lock(cerrMutex);
         std::cerr << "Invalid graph input" << std::endl;
         return -1;
     }
 
-    std::cout << "Creating graph with " << n << " vertices and " << m << " edges." << std::endl;
-
-    g = std::make_unique<Graph>(n, m);
-    for (int i = 0; i < m; i++) {
-        int u, v, w;
-        if (!(ss >> u >> v >> w)) {
-            memset(buffer, 0, sizeof(buffer));
-            int bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
-            if (bytesReceived <= 0) {
-                clientNumber--;
-                std::cerr << "connection closed" << std::endl;
-                return -1;
-            }
-            ss.clear();
-            ss.str(buffer);
-            ss >> u >> v >> w;
-        }
-        std::cout << "Adding edge: " << u << "-" << v << " with weight " << w << std::endl;
-        g->addEdge(u, v, w);
+    {
+        std::lock_guard<std::mutex> lock(coutMutex);
+        std::cout << "Creating graph with " << n << " vertices and " << m << " edges." << std::endl;
     }
+
+    // Create the new graph object first
+    std::shared_ptr<Graph> newGraph = std::make_shared<Graph>(n, m);
+
+    {
+        std::lock_guard<std::mutex> lock(graphMutex);
+        g = newGraph;
+    }
+
+    for (int i = 0; i < m; i++) {
+        char buffer[1024];
+        int u, v, w;
+
+        int bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
+        if (bytesReceived <= 0) {
+            {
+                std::lock_guard<std::mutex> lock(clientNumberMutex);
+                clientNumber--;
+            }
+            {
+                std::lock_guard<std::mutex> lock(cerrMutex);
+                std::cerr << "Connection closed or recv error" << std::endl;
+            }
+            return -1;
+        }
+
+        buffer[bytesReceived] = '\0';
+        std::stringstream edgeStream(buffer);
+
+        if (!(edgeStream >> u >> v >> w)) {
+            std::lock_guard<std::mutex> lock(cerrMutex);
+            std::cerr << "Invalid edge input" << std::endl;
+            sendResponse(clientSock, "Invalid edge input\n");
+            continue;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(coutMutex);
+            std::cout << "Adding edge: " << u << "-" << v << " with weight " << w << std::endl;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(graphMutex);
+            g->addEdge(u, v, w);
+        }
+    }
+
     return 0;
 }
 
+std::mutex scanSrcDestMutex;
+
 int scanSrcDest(std::stringstream &ss, int &src, int &dest) {
+    std::lock_guard<std::mutex> lock(scanSrcDestMutex);
+
     if (!(ss >> src >> dest) || src < 0 || dest < 0) {
+        std::lock_guard<std::mutex> lock(cerrMutex);
         std::cerr << "Invalid source or destination input" << std::endl;
         return -1;
     }
     return 0;
 }
 
-void handleCommands(int clientSock, std::unique_ptr<Graph> &g, MSTFactory &factory, std::unique_ptr<Tree> &mst) {
+void handleCommands(int clientSock, std::shared_ptr<Graph> &g, MSTFactory &factory, std::shared_ptr<Tree> &mst) {
     char buffer[1024];
+
     while (true) {
         int bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
         if (bytesReceived <= 0) {
+            std::lock_guard<std::mutex> lock(clientNumberMutex);
             clientNumber--;
-            std::cerr << "recv error or connection closed" << std::endl;
+            {
+                std::lock_guard<std::mutex> lock(cerrMutex);
+                std::cerr << "recv error or connection closed" << std::endl;
+            }
             close(clientSock);
             return;
         }
+
         buffer[bytesReceived] = '\0';
         std::string command(buffer);
+        {
+            std::lock_guard<std::mutex> lock(coutMutex);
+            std::cout << "Received command: " << command << std::endl;
+        }
 
         std::stringstream ss(command);
         std::string cmd;
         ss >> cmd;
-
-        std::lock_guard<std::mutex> lock(graphMutex);
 
         if (cmd == "Newgraph") {
             int n, m;
@@ -97,70 +149,87 @@ void handleCommands(int clientSock, std::unique_ptr<Graph> &g, MSTFactory &facto
             sendResponse(clientSock, "Graph created with " + std::to_string(n) + " vertices and " + std::to_string(m) + " edges.\n");
 
         } else if (cmd == "Prim") {
-            if (!g || g->getAdj().empty()) {
-                sendResponse(clientSock, "Graph not initialized\n");
-                continue;
+            {
+                std::lock_guard<std::mutex> lock(graphMutex);
+                if (!g || g->getAdj().empty()) {
+                    sendResponse(clientSock, "Graph not initialized\n");
+                    continue;
+                }
             }
+
             factory.setStrategy(std::make_unique<PrimStrategy>());
-            mst = factory.createMST(g);
+            {
+                std::lock_guard<std::mutex> lock(treeMutex);
+                mst = factory.createMST(g);
+            }
             sendResponse(clientSock, "MST created using Prim's algorithm.\n" + mst->printMST());
 
         } else if (cmd == "Kruskal") {
-            if (!g || g->getAdj().empty()) {
-                sendResponse(clientSock, "Graph not initialized\n");
-                continue;
+            {
+                std::lock_guard<std::mutex> lock(graphMutex);
+                if (!g || g->getAdj().empty()) {
+                    sendResponse(clientSock, "Graph not initialized\n");
+                    continue;
+                }
             }
+
             factory.setStrategy(std::make_unique<KruskalStrategy>());
-            mst = factory.createMST(g);
+            {
+                std::lock_guard<std::mutex> lock(treeMutex);
+                mst = factory.createMST(g);
+            }
             sendResponse(clientSock, "MST created using Kruskal's algorithm.\n" + mst->printMST());
 
         } else if (cmd == "MSTweight") {
-            if (!mst) {
-                sendResponse(clientSock, "MST not created\n");
-                continue;
+            {
+                std::lock_guard<std::mutex> lock(treeMutex);
+                if (!mst) {
+                    sendResponse(clientSock, "MST not created\n");
+                    continue;
+                }
             }
             sendResponse(clientSock, "Total weight of the MST is: " + std::to_string(mst->totalWeight()) + "\n");
 
-     } else if (cmd == "Shortestpath") {
-           if (!mst) {
-        sendResponse(clientSock, "MST not created\n");
-        continue;
-    }
-
-    auto result = mst->shortestPath();
-    int shortestDistance = result.first;
-    std::string shortestPath = result.second;
-
-    sendResponse(clientSock, "Shortest path in MST is: " + shortestPath + " with distance: " + std::to_string(shortestDistance) + "\n");
-
-        } else if (cmd == "Longestpath") {
-    if (!mst) {
-        sendResponse(clientSock, "MST not created\n");
-        continue;
-    }
-
-    // Get the diameter and the path
-    int longestDistance = mst->diameter();
-
-    if (longestDistance == INT_MAX) {
-        sendResponse(clientSock, "Error: \n");
-    } else {
-        // Send the response with both the length of the longest path and the actual path
-        sendResponse(clientSock, "Longest path in the MST is: " + std::to_string(longestDistance) + 
-                     "\n");
-    }
-}
-else if (cmd == "Averdist") {
-            if (!mst) {
-                sendResponse(clientSock, "MST not created\n");
-                continue;
+        } else if (cmd == "LongestPath") {
+            {
+                std::lock_guard<std::mutex> lock(treeMutex);
+                if (!mst) {
+                    sendResponse(clientSock, "MST not created\n");
+                    continue;
+                }
             }
-            sendResponse(clientSock, "Average distance in the MST is: " + std::to_string(mst->averageDistanceEdges()) + "\n");
+            auto [distance, path] = mst->shortestPath();
+            sendResponse(clientSock, "Longest path length: " + std::to_string(distance) + "\nPath: " + path);
+
+        } else if (cmd == "ShortestPath") {
+            {
+                std::lock_guard<std::mutex> lock(treeMutex);
+                if (!mst) {
+                    sendResponse(clientSock, "MST not created\n");
+                    continue;
+                }
+            }
+            auto [distance, path] = mst->shortestPath();
+            sendResponse(clientSock, "Shortest path length: " + std::to_string(distance) + "\nPath: " + path);
+
+        } else if (cmd == "AverDist") {
+            {
+                std::lock_guard<std::mutex> lock(treeMutex);
+                if (!mst) {
+                    sendResponse(clientSock, "MST not created\n");
+                    continue;
+                }
+            }
+            float avgDistance = mst->averageDistanceEdges();
+            sendResponse(clientSock, "Average distance between edges in the MST is: " + std::to_string(avgDistance) + "\n");
 
         } else if (cmd == "Exit") {
             sendResponse(clientSock, "Goodbye\n");
             close(clientSock);
-            clientNumber--;
+            {
+                std::lock_guard<std::mutex> lock(clientNumberMutex);
+                clientNumber--;
+            }
             break;
 
         } else {
@@ -168,6 +237,7 @@ else if (cmd == "Averdist") {
         }
     }
 }
+
 
 int main() {
     signal(SIGINT, signalHandler);
@@ -189,10 +259,13 @@ int main() {
     bind(serverSock, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
     listen(serverSock, 10);
 
-    std::cout << "Server listening on port " << port << std::endl;
+    {
+        std::lock_guard<std::mutex> lock(coutMutex);
+        std::cout << "Server listening on port " << port << std::endl;
+    }
 
-    auto g = std::make_unique<Graph>();  // Create a unique_ptr for Graph
-    auto t = std::make_unique<Tree>();   // Create a unique_ptr for Tree
+    auto g = std::make_shared<Graph>();
+    auto t = std::make_shared<Tree>();
     MSTFactory factory;
 
     auto acceptHandler = std::make_shared<ConcreteEventHandler>(
@@ -201,12 +274,16 @@ int main() {
             socklen_t sinSize = sizeof(clientAddr);
             int clientSock = accept(fd, (struct sockaddr *)&clientAddr, &sinSize);
             if (clientSock >= 0) {
-                std::cout << "New connection on socket " << clientSock << std::endl;
+                {
+                    std::lock_guard<std::mutex> lock(coutMutex);
+                    std::cout << "New connection on socket " << clientSock << std::endl;
+                }
 
                 std::thread([clientSock, &g, &t, &factory]() {
                     handleCommands(clientSock, g, factory, t);
                 }).detach();
             } else {
+                std::lock_guard<std::mutex> lock(cerrMutex);
                 std::cerr << "Error accepting connection on fd: " << fd << std::endl;
             }
         }

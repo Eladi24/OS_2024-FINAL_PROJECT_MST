@@ -1,25 +1,33 @@
 #include "Tree.hpp"
 #include <climits>
-#include <iomanip>  // for std::setw
+#include <iomanip>
 #include <mutex>
 
-// Add a mutex to protect the Tree's state
+// Mutex to protect the Tree's state
 std::mutex treeMutex;
 
 void Tree::init(vector<Edge> edges) {
-    V = edges.size() + 1;
-    E = 0;
-    adj.resize(V);
+    {
+        //std::lock_guard<std::mutex> lock(treeMutex); // Protect the modification of V and E
+        V = edges.size() + 1;
+        E = 0;
+        adj.resize(V);
+    }
     
+    // Lock only during modifications to the adjacency list
     for (const Edge& e : edges) {
-        addEdge(e.src, e.dest, e.weight);
+        {
+            //std::lock_guard<std::mutex> lock(treeMutex);
+            adj[e.src - 1].push_back(e);  // Add edges directly without using addEdge()
+            adj[e.dest - 1].push_back({e.dest, e.src, e.weight});
+            E++;
+        }
     }
 }
 
 
-
 int Tree::totalWeight() {
-    std::lock_guard<std::mutex> lock(treeMutex);  // Protect access to the tree's state
+    //std::lock_guard<std::mutex> lock(treeMutex);
 
     int total = 0;
     for (int i = 0; i < V; i++) {
@@ -31,7 +39,7 @@ int Tree::totalWeight() {
 }
 
 vector<int> Tree::dijkstra(int src, vector<int> &parentTrack) {
-    std::lock_guard<std::mutex> lock(treeMutex);  // Protect access to the tree's state
+    std::lock_guard<std::mutex> lock(treeMutex);
 
     priority_queue<pair<int, int>, vector<pair<int, int>>, greater<pair<int, int>>> pq;
     vector<int> dist(V, INT_MAX);
@@ -57,7 +65,7 @@ vector<int> Tree::dijkstra(int src, vector<int> &parentTrack) {
 }
 
 void Tree::dfs(int node, int parent, vector<int> &dist, vector<int> &parentTrack) {
-    std::lock_guard<std::mutex> lock(treeMutex);  // Protect access to the tree's state
+    std::lock_guard<std::mutex> lock(treeMutex);
 
     for (Edge e : adj[node - 1]) {
         if (e.dest != parent) {
@@ -69,7 +77,7 @@ void Tree::dfs(int node, int parent, vector<int> &dist, vector<int> &parentTrack
 }
 
 string Tree::reconstructPath(int src, int dest, const vector<int> &parentTrack) {
-    std::lock_guard<std::mutex> lock(treeMutex);  // Protect access to the tree's state
+    std::lock_guard<std::mutex> lock(treeMutex);
 
     int dest_index = dest - 1;
     if (parentTrack[dest_index] == -1) {
@@ -99,7 +107,7 @@ string Tree::reconstructPath(int src, int dest, const vector<int> &parentTrack) 
 }
 
 void Tree::floydWarshall() {
-    std::lock_guard<std::mutex> lock(treeMutex);  // Protect access to the tree's state
+    std::lock_guard<std::mutex> lock(treeMutex);
 
     distanceMap.resize(V, vector<int>(V, INT_MAX));
     for (int i = 0; i < V; i++) {
@@ -135,8 +143,9 @@ float Tree::averageDistanceEdges() {
     }
     return static_cast<float>(total) / count;
 }
+
 void Tree::addEdge(int u, int v, int w) {
-    std::lock_guard<std::mutex> lock(treeMutex);  // Protect access to the tree's state
+    std::lock_guard<std::mutex> lock(treeMutex);
 
     if (u < 0 || u > V || v < 0 || v > V) {
         cerr << "Invalid edge, vertices must be between 1 and " << V << endl;
@@ -167,11 +176,10 @@ std::string Tree::printMST() {
     header += "Node 1 -- Node 2 (Weight)\n";
     header += "------------------------------------\n";
 
-    // Create a result string outside the lock to avoid holding it too long
     std::string result;
 
     {
-        std::lock_guard<std::mutex> mstLock(treeMutex); // Protect MST access
+        std::lock_guard<std::mutex> mstLock(treeMutex);
         result = printMST(0, -1, visited);
     }
 
@@ -192,10 +200,7 @@ std::string Tree::printMST(int node, int parent, std::vector<bool> &visited) {
     return result;
 }
 
-
 std::pair<int, std::string> Tree::shortestPath() {
-   // std::lock_guard<std::mutex> lock(treeMutex);  // Protect access to the tree's state
-
     floydWarshall();
 
     int shortest = INT_MAX;
@@ -217,15 +222,13 @@ std::pair<int, std::string> Tree::shortestPath() {
     }
 
     std::vector<int> parentTrack(V, -1);
-    dijkstra(start, parentTrack);  // Populate parentTrack for the shortest path
+    dijkstra(start, parentTrack);
 
     std::string path = reconstructPath(start, end, parentTrack);
     return {shortest, path};
 }
 
 int Tree::diameter() {
-    //std::lock_guard<std::mutex> lock(treeMutex);  // Protect access to the tree's state
-
     auto bfs = [&](int start) {
         vector<int> dist(V, -1);
         queue<int> q;
@@ -250,8 +253,8 @@ int Tree::diameter() {
         return std::make_pair(farthest, dist[farthest]);
     };
 
-    auto p1 = bfs(0); // Find the farthest node from node 0
-    auto p2 = bfs(p1.first); // Find the farthest node from p1.first
+    auto p1 = bfs(0); 
+    auto p2 = bfs(p1.first);
 
-    return p2.second; // The distance of p2 is the diameter of the tree
+    return p2.second;
 }

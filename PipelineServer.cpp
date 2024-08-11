@@ -389,26 +389,32 @@ int main() {
         cout << "MST pipeline server waiting for requests on port " << port << endl;
     }
 
-while (true) {
-    std::lock_guard<std::mutex> shutdownLock(shutdownMutex);
-    if (!serverRunning) {
-        break;
-    }
+    vector<std::thread> threads;  // Vector to keep track of threads
 
-    int newClientSock = acceptConnection(serverSock);
-    if (newClientSock == -1) {
-        // If the server is shutting down, break the loop
+    while (true) {
         if (!serverRunning) {
             break;
         }
-        continue;
+
+        int newClientSock = acceptConnection(serverSock);
+        if (newClientSock == -1) {
+            if (!serverRunning) {
+                break;
+            }
+            continue;
+        }
+
+        threads.emplace_back([newClientSock, &pipeline, &g, &mst, &factory]() {
+            handleCommands(newClientSock, pipeline, factory, g, mst);
+        });
     }
 
-    thread clientThread([newClientSock, &pipeline, &g, &mst, &factory]() {
-        handleCommands(newClientSock, pipeline, factory, g, mst);
-    });
-    clientThread.detach();
-}
+    // Join all threads before exiting
+    for (auto& thread : threads) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
 
     signalHandlerLambda(SIGINT);
 
