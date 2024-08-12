@@ -30,43 +30,7 @@ std::vector<std::thread> threads;
 
 int serverSock;
 
-void signalHandler(int signum) {
-    {
-        std::lock_guard<std::mutex> lock(coutMutex);
-        std::cout << "\nInterrupt signal (" << signum << ") received.\n";
-    }
 
-    // Stop reactor
-    if (reactor) {
-        reactor->stop();
-    }
-
-    // Stop thread pool
-    if (pool) {
-        pool->stop();
-    }
-
-    // Join all threads before exiting
-    for (auto &t : threads) {
-        if (t.joinable()) {
-            t.join();
-        }
-    }
-
-    // Explicitly reset shared pointers to ensure cleanup
-    reactor.reset();
-    pool.reset();
-    //acceptHandler.reset();  // Reset the ConcreteEventHandler shared pointer
-
-    // Close server socket
-    if (serverSock >= 0) {
-        close(serverSock);
-        serverSock = -1;
-    }
-
-    // Exit the program
-    exit(signum);
-}
 
 void sendResponse(int clientSock, const std::string &response) {
     if (send(clientSock, response.c_str(), response.size(), 0) < 0) {
@@ -273,37 +237,107 @@ void handleCommands(int clientSock, std::shared_ptr<Graph> &g, MSTFactory &facto
         }
     }
 }
+std::function<void(int)> signalHandlerLambda;
+//std::shared_ptr<Reactor> reactor;
+//std::unique_ptr<LFThreadPool> pool;
+bool serverRunning = true;
 
-  auto g = std::make_shared<Graph>();
-    auto t = std::make_shared<Tree>();
+void signalHandler(int signum) {
+    if (signalHandlerLambda) {
+        signalHandlerLambda(signum);
+    }
+}
+
 int main() {
     signal(SIGINT, signalHandler);
 
-    reactor = std::make_shared<Reactor>();
-    pool = std::make_unique<LFThreadPool>(10, reactor);
+    // Shared resources
+    auto g = std::make_shared<Graph>();
+    auto t = std::make_shared<Tree>();
+    MSTFactory factory;
 
-    serverSock = socket(AF_INET, SOCK_STREAM, 0);
+    std::vector<std::thread> threads;
+    std::shared_ptr<ConcreteEventHandler> acceptHandler;
+
+    signalHandlerLambda = [&](int signum) {
+        std::lock_guard<std::mutex> coutLock(coutMutex);
+        std::cout << "Freeing memory and shutting down..." << std::endl;
+
+        // Stop the server loop
+        serverRunning = false;
+
+        // Join all threads
+        for (auto& thread : threads) {
+            if (thread.joinable()) {
+                thread.join();
+            }
+        }
+
+        // Reset shared resources
+        g.reset();
+        t.reset();
+
+        // Reset the handler explicitly
+        if (acceptHandler) {
+            reactor->removeHandler(acceptHandler, EventType::ACCEPT);
+            acceptHandler.reset();
+        }
+
+        // Stop reactor and pool if they exist
+        if (reactor) {
+            reactor->stop();
+            reactor.reset();
+        }
+
+        if (pool) {
+            pool->stop();
+            pool.reset();
+        }
+
+        // Close server socket
+        if (serverSock >= 0) {
+            close(serverSock);
+            serverSock = -1;
+        }
+
+        exit(signum);
+    };
+
+    // Server socket setup
     int opt = 1;
+    serverSock = socket(AF_INET, SOCK_STREAM, 0);
+    if (serverSock < 0) {
+        std::cerr << "Socket creation error" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
     setsockopt(serverSock, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
 
     struct sockaddr_in serverAddr;
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = INADDR_ANY;
-    serverAddr.sin_port = htons(port);
+    serverAddr.sin_port = htons(4050);  // Assuming port is 4050
 
-    bind(serverSock, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
-    listen(serverSock, 10);
-
-    {
-        std::lock_guard<std::mutex> lock(coutMutex);
-        std::cout << "Server listening on port " << port << std::endl;
+    if (bind(serverSock, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
+        std::cerr << "Bind error" << std::endl;
+        exit(EXIT_FAILURE);
     }
 
-    auto g = std::make_shared<Graph>();
-    auto t = std::make_shared<Tree>();
-    MSTFactory factory;
+    if (listen(serverSock, 10) < 0) {
+        std::cerr << "Listen error" << std::endl;
+        exit(EXIT_FAILURE);
+    }
 
-    auto acceptHandler = std::make_shared<ConcreteEventHandler>(
+    {
+        std::lock_guard<std::mutex> coutLock(coutMutex);
+        std::cout << "Server listening on port " << ntohs(serverAddr.sin_port) << std::endl;
+    }
+
+    // Reactor and ThreadPool initialization
+    reactor = std::make_shared<Reactor>();
+    pool = std::make_unique<LFThreadPool>(10, reactor);
+
+    acceptHandler = std::make_shared<ConcreteEventHandler>(
         serverSock, [&, factoryPtr = &factory](int fd) mutable {
             struct sockaddr_in clientAddr;
             socklen_t sinSize = sizeof(clientAddr);
@@ -314,7 +348,7 @@ int main() {
                     std::cout << "New connection on socket " << clientSock << std::endl;
                 }
 
-                // Create a thread and store it for later joining
+                // Create a thread to handle the client's commands
                 threads.emplace_back([clientSock, &g, &t, factoryPtr]() mutable {
                     handleCommands(clientSock, g, *factoryPtr, t);
                 });
@@ -326,13 +360,15 @@ int main() {
     );
 
     reactor->registerHandler(acceptHandler, EventType::ACCEPT);
-    
     pool->run();
-acceptHandler.reset();
 
-    // Clean up before exiting
-    signalHandler(SIGINT);  // Mimic signal handling to clean up resources
-t.reset();
-g.reset();
+    // Main loop to keep server running
+    while (serverRunning) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));  // Keep the server alive
+    }
+
+    // Trigger cleanup before exiting
+    signalHandlerLambda(SIGINT);
+
     return 0;
 }

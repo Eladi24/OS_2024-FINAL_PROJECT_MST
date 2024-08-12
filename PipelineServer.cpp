@@ -336,88 +336,113 @@ int acceptConnection(int serverSock) {
 
 int main() {
     signal(SIGINT, signalHandler);
-    vector<unique_ptr<ActiveObject>> pipeline;
-    auto g = std::make_shared<Graph>();  // Shared graph for all clients
-    auto mst = std::make_shared<Tree>(); // Shared MST for all clients
+
+    // Shared resources
+    auto g = std::make_shared<Graph>();
+    auto t = std::make_shared<Tree>();
     MSTFactory factory;
 
+    vector<std::thread> threads;
+
     signalHandlerLambda = [&](int signum) {
-        std::lock_guard<std::mutex> coutLock(coutMutex);  // Protect cout
-        cout << "Freeing memory" << endl;
-        g.reset();
-        mst.reset();
-        for (auto &obj : pipeline) {
-            obj.reset();
+        std::lock_guard<std::mutex> coutLock(coutMutex);
+        std::cout << "Freeing memory and shutting down..." << std::endl;
+
+        // Join all threads
+        for (auto& thread : threads) {
+            if (thread.joinable()) {
+                thread.join();
+            }
         }
+
+        // Reset shared resources
+        g.reset();
+        t.reset();
+
+        // Stop reactor and pool if they exist
+        if (reactor) {
+            reactor->stop();
+            reactor.reset();
+        }
+
+        if (pool) {
+            pool->stop();
+            pool.reset();
+        }
+
+        // Close server socket
+        if (serverSock >= 0) {
+            close(serverSock);
+            serverSock = -1;
+        }
+
+        exit(signum);
     };
 
-    int serverSock;
-    struct sockaddr_in serverAddr;
+    // Server socket setup
     int opt = 1;
-
-    if ((serverSock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        std::lock_guard<std::mutex> coutLock(coutMutex);  // Protect cerr
-        cerr << "Socket creation error" << endl;
-        exit(1);
+    serverSock = socket(AF_INET, SOCK_STREAM, 0);
+    if (serverSock < 0) {
+        std::cerr << "Socket creation error" << std::endl;
+        exit(EXIT_FAILURE);
     }
 
-    if (setsockopt(serverSock, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
-        std::lock_guard<std::mutex> coutLock(coutMutex);  // Protect cerr
-        cerr << "Setsockopt error" << endl;
-        exit(1);
-    }
+    setsockopt(serverSock, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
 
+    struct sockaddr_in serverAddr;
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = INADDR_ANY;
     serverAddr.sin_port = htons(port);
-    memset(&(serverAddr.sin_zero), '\0', 8);
 
     if (bind(serverSock, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
-        std::lock_guard<std::mutex> coutLock(coutMutex);  // Protect cerr
-        cerr << "Bind error" << endl;
-        exit(1);
+        std::cerr << "Bind error" << std::endl;
+        exit(EXIT_FAILURE);
     }
 
     if (listen(serverSock, 10) < 0) {
-        std::lock_guard<std::mutex> coutLock(coutMutex);  // Protect cerr
-        cerr << "Listen error" << endl;
-        exit(1);
+        std::cerr << "Listen error" << std::endl;
+        exit(EXIT_FAILURE);
     }
 
     {
-        std::lock_guard<std::mutex> coutLock(coutMutex);  // Protect cout
-        cout << "MST pipeline server waiting for requests on port " << port << endl;
+        std::lock_guard<std::mutex> coutLock(coutMutex);
+        std::cout << "Server listening on port " << port << std::endl;
     }
 
-    vector<std::thread> threads;  // Vector to keep track of threads
+    // Reactor and ThreadPool initialization
+    reactor = std::make_shared<Reactor>();
+    pool = std::make_unique<LFThreadPool>(10, reactor);
 
-    while (true) {
-        if (!serverRunning) {
-            break;
-        }
+    auto acceptHandler = std::make_shared<ConcreteEventHandler>(
+        serverSock, [&, factoryPtr = &factory](int fd) mutable {
+            struct sockaddr_in clientAddr;
+            socklen_t sinSize = sizeof(clientAddr);
+            int clientSock = accept(fd, (struct sockaddr *)&clientAddr, &sinSize);
+            if (clientSock >= 0) {
+                {
+                    std::lock_guard<std::mutex> lock(coutMutex);
+                    std::cout << "New connection on socket " << clientSock << std::endl;
+                }
 
-        int newClientSock = acceptConnection(serverSock);
-        if (newClientSock == -1) {
-            if (!serverRunning) {
-                break;
+                // Create a thread to handle the client's commands
+                threads.emplace_back([clientSock, &g, &t, factoryPtr]() mutable {
+                    handleCommands(clientSock, g, *factoryPtr, t);
+                });
+            } else {
+                std::lock_guard<std::mutex> lock(cerrMutex);
+                std::cerr << "Error accepting connection on fd: " << fd << std::endl;
             }
-            continue;
         }
+    );
 
-        threads.emplace_back([newClientSock, &pipeline, &g, &mst, &factory]() {
-            handleCommands(newClientSock, pipeline, factory, g, mst);
-        });
+    reactor->registerHandler(acceptHandler, EventType::ACCEPT);
+    pool->run();
+
+    while (serverRunning) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));  // Keep the server alive
     }
 
-    // Join all threads before exiting
-    for (auto& thread : threads) {
-        if (thread.joinable()) {
-            thread.join();
-        }
-    }
+    signalHandlerLambda(SIGINT);  // Trigger cleanup before exiting
 
-    signalHandlerLambda(SIGINT);
-
-    close(serverSock);
     return 0;
 }
