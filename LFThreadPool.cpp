@@ -1,46 +1,45 @@
 #include "LFThreadPool.hpp"
+#include <iostream> // For debugging
 
 LFThreadPool::LFThreadPool(unsigned long numThreads, std::shared_ptr<Reactor> reactor)
-    : reactor(reactor), running(true) { // Initialize the running flag
+    : reactor(reactor), running(true) {
     for (unsigned long i = 0; i < numThreads; ++i) {
         workers.emplace_back(&LFThreadPool::workerThread, this);
     }
 }
 
 LFThreadPool::~LFThreadPool() {
-    stop(); // Ensure stop is called to clean up threads
-    for (auto &worker : workers) {
-        if (worker.joinable()) {
-            worker.join(); // Wait for all threads to finish
-        }
-    }
+    stop();
 }
 
 void LFThreadPool::run() {
-    for (auto &worker : workers) {
-        if (worker.joinable()) {
-            worker.join(); // Wait for all threads to finish
-        }
-    }
+    // This method is not required to do anything special in this case
+    // The worker threads are already running in the constructor.
 }
 
 void LFThreadPool::stop() {
     {
         std::lock_guard<std::mutex> lock(queueMutex);
-        running = false; // Set the running flag to false to stop the loop
-        reactor->notifyAll(); // Ensure all threads are woken up to exit
+        if (!running) return;  // Ensure stop is called only once
+        running = false;  // Set the running flag to false to stop the loop
     }
+
+    reactor->notifyAll();  // Wake up all threads to ensure they exit
 
     for (auto &worker : workers) {
         if (worker.joinable()) {
-            worker.join(); // Join all threads
+            worker.join();  // Join all threads
         }
     }
+    workers.clear();  // Clear the vector after all threads have been joined
 }
 
-
 void LFThreadPool::workerThread() {
-    while (running) {
-        reactor->handleEvents(); // Process events in the reactor
+    while (true) {
+        {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            if (!running) break;  // Exit the loop if not running
+        }
+        reactor->handleEvents();  // Process events in the reactor
     }
 }

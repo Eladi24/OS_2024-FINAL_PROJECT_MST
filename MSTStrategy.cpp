@@ -23,7 +23,7 @@ int PrimStrategy::minKey(const std::vector<int>& key, const std::vector<char>& m
 }
 
 std::vector<Edge> PrimStrategy::findMST(const Graph& g) {
-    std::lock_guard<std::mutex> lock(graphMutex);  // Protect access to the Graph
+    //std::lock_guard<std::mutex> lock(graphMutex);  // Protect access to the Graph
 
     int V = g.getVerticesNumber();
     std::vector<Edge> result;
@@ -97,7 +97,7 @@ void DSU::unite(int x, int y) {
 }
 
 std::vector<Edge> KruskalStrategy::findMST(const Graph& g) {
-    std::lock_guard<std::mutex> lock(graphMutex);  // Protect access to the Graph
+    //std::lock_guard<std::mutex> lock(graphMutex);  // Protect access to the Graph
 
     int V = g.getVerticesNumber();
     std::vector<Edge> result;

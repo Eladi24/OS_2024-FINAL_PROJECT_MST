@@ -1,6 +1,7 @@
 #include <memory>
 #include "Tree.hpp"
 #include "MSTStrategy.hpp"
+#include <mutex>
 
 class MSTFactory {
 public:
@@ -9,4 +10,5 @@ public:
 
 private:
     std::unique_ptr<MSTStrategy> strategy;
+     std::mutex cerrMutex;
 };

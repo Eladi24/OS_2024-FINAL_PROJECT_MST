@@ -12,7 +12,7 @@ std::mutex treeMutex;
 
 void Tree::init(vector<Edge> edges) {
     {
-        std::lock_guard<std::mutex> lock(treeMutex);
+       //std::lock_guard<std::mutex> lock(treeMutex);
         V = edges.size() + 1;
         E = 0;
         adj.resize(V);
@@ -20,7 +20,7 @@ void Tree::init(vector<Edge> edges) {
     
     for (const Edge& e : edges) {
         {
-            std::lock_guard<std::mutex> lock(treeMutex);
+           // std::lock_guard<std::mutex> lock(treeMutex);
             adj[e.src - 1].push_back(e);
             adj[e.dest - 1].push_back({e.dest, e.src, e.weight});
             E++;
@@ -39,7 +39,7 @@ int Tree::totalWeight() {
 }
 
 vector<int> Tree::dijkstra(int src, vector<int> &parentTrack) {
-    std::lock_guard<std::mutex> lock(treeMutex);
+    //std::lock_guard<std::mutex> lock(treeMutex);
 
     priority_queue<pair<int, int>, vector<pair<int, int>>, greater<pair<int, int>>> pq;
     vector<int> dist(V, INT_MAX);
@@ -65,7 +65,7 @@ vector<int> Tree::dijkstra(int src, vector<int> &parentTrack) {
 }
 
 void Tree::dfs(int node, int parent, vector<int> &dist, vector<int> &parentTrack) {
-    std::lock_guard<std::mutex> lock(treeMutex);
+    //std::lock_guard<std::mutex> lock(treeMutex);
 
     for (Edge e : adj[node - 1]) {
         if (e.dest != parent) {
@@ -77,7 +77,7 @@ void Tree::dfs(int node, int parent, vector<int> &dist, vector<int> &parentTrack
 }
 
 string Tree::reconstructPath(int src, int dest, const vector<int> &parentTrack) {
-    std::lock_guard<std::mutex> lock(treeMutex);
+    //std::lock_guard<std::mutex> lock(treeMutex);
 
     int dest_index = dest - 1;
     if (parentTrack[dest_index] == -1) {
@@ -107,7 +107,7 @@ string Tree::reconstructPath(int src, int dest, const vector<int> &parentTrack) 
 }
 
 void Tree::floydWarshall() {
-    std::lock_guard<std::mutex> lock(treeMutex);
+    //std::lock_guard<std::mutex> lock(treeMutex);
 
     distanceMap.resize(V, vector<int>(V, INT_MAX));
     for (int i = 0; i < V; i++) {

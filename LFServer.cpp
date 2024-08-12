@@ -9,28 +9,28 @@
 #include <string.h>
 #include <mutex>
 #include <vector>
+#include <atomic>  // For std::atomic
+#include <errno.h>  // For checking EINTR
 #include "Graph.hpp"
 #include "Tree.hpp"
 #include "MSTFactory.hpp"
 #include "LFThreadPool.hpp"
 #include "Reactor.hpp"
 #include "ConcreteEventHandler.hpp"
-#include <climits>
 
 const int port = 4050;
-int clientNumber = 0;
-std::mutex graphMutex; // Mutex to protect Graph access
-std::mutex treeMutex;  // Mutex to protect Tree access
-std::mutex clientNumberMutex; // Mutex to protect clientNumber access
-std::mutex coutMutex;  // Mutex to protect std::cout
-std::mutex cerrMutex;  // Mutex to protect std::cerr
+std::atomic<int> clientNumber(0);
+std::mutex graphMutex;  // Mutex to protect Graph access
+std::mutex treeMutex;   // Mutex to protect Tree access
+std::mutex coutMutex;   // Mutex to protect std::cout
+std::mutex cerrMutex;   // Mutex to protect std::cerr
+std::mutex threadVectorMutex;  // Mutex to protect access to the threads vector
 std::shared_ptr<Reactor> reactor;
 std::unique_ptr<LFThreadPool> pool;
 std::vector<std::thread> threads;
-
-int serverSock;
-
-
+std::atomic<bool> serverRunning(true);  // Atomic variable to prevent data races
+std::mutex serverSockMutex;
+int serverSock = -1;
 
 void sendResponse(int clientSock, const std::string &response) {
     if (send(clientSock, response.c_str(), response.size(), 0) < 0) {
@@ -39,93 +39,18 @@ void sendResponse(int clientSock, const std::string &response) {
     }
 }
 
-int scanGraph(int clientSock, int &n, int &m, std::stringstream &ss, std::shared_ptr<Graph> &g) {
-    if (!(ss >> n >> m) || n <= 0 || m < 0) {
-        std::lock_guard<std::mutex> lock(cerrMutex);
-        std::cerr << "Invalid graph input" << std::endl;
-        return -1;
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(coutMutex);
-        std::cout << "Creating graph with " << n << " vertices and " << m << " edges." << std::endl;
-    }
-
-    // Create the new graph object first
-    std::shared_ptr<Graph> newGraph = std::make_shared<Graph>(n, m);
-
-    {
-        std::lock_guard<std::mutex> lock(graphMutex);
-        g = newGraph;
-    }
-
-    for (int i = 0; i < m; i++) {
-        char buffer[1024];
-        int u, v, w;
-
-        int bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
-        if (bytesReceived <= 0) {
-            {
-                std::lock_guard<std::mutex> lock(clientNumberMutex);
-                clientNumber--;
-            }
-            {
-                std::lock_guard<std::mutex> lock(cerrMutex);
-                std::cerr << "Connection closed or recv error" << std::endl;
-            }
-            return -1;
-        }
-
-        buffer[bytesReceived] = '\0';
-        std::stringstream edgeStream(buffer);
-
-        if (!(edgeStream >> u >> v >> w)) {
-            std::lock_guard<std::mutex> lock(cerrMutex);
-            std::cerr << "Invalid edge input" << std::endl;
-            sendResponse(clientSock, "Invalid edge input\n");
-            continue;
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(coutMutex);
-            std::cout << "Adding edge: " << u << "-" << v << " with weight " << w << std::endl;
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(graphMutex);
-            g->addEdge(u, v, w);
-        }
-    }
-
-    return 0;
-}
-
-std::mutex scanSrcDestMutex;
-
-int scanSrcDest(std::stringstream &ss, int &src, int &dest) {
-    std::lock_guard<std::mutex> lock(scanSrcDestMutex);
-
-    if (!(ss >> src >> dest) || src < 0 || dest < 0) {
-        std::lock_guard<std::mutex> lock(cerrMutex);
-        std::cerr << "Invalid source or destination input" << std::endl;
-        return -1;
-    }
-    return 0;
-}
-
 void handleCommands(int clientSock, std::shared_ptr<Graph> &g, MSTFactory &factory, std::shared_ptr<Tree> &mst) {
     char buffer[1024];
 
     while (true) {
         int bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
         if (bytesReceived <= 0) {
-            std::lock_guard<std::mutex> lock(clientNumberMutex);
-            clientNumber--;
             {
                 std::lock_guard<std::mutex> lock(cerrMutex);
                 std::cerr << "recv error or connection closed" << std::endl;
             }
             close(clientSock);
+            clientNumber--;
             return;
         }
 
@@ -142,94 +67,105 @@ void handleCommands(int clientSock, std::shared_ptr<Graph> &g, MSTFactory &facto
 
         if (cmd == "Newgraph") {
             int n, m;
-            if (scanGraph(clientSock, n, m, ss, g) == -1) {
+            if (!(ss >> n >> m) || n <= 0 || m < 0) {
                 sendResponse(clientSock, "Invalid graph input\n");
                 continue;
             }
-            sendResponse(clientSock, "Graph created with " + std::to_string(n) + " vertices and " + std::to_string(m) + " edges.\n");
 
-        } else if (cmd == "Prim") {
+            {
+                std::lock_guard<std::mutex> lock(graphMutex);
+                g = std::make_shared<Graph>(n, m);
+            }
+
+            sendResponse(clientSock, "Graph created with " + std::to_string(n) + " vertices. Please send " + std::to_string(m) + " edges.\n");
+
+            for (int i = 0; i < m; ++i) {
+                bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
+                if (bytesReceived <= 0) {
+                    std::lock_guard<std::mutex> lock(cerrMutex);
+                    std::cerr << "recv error or connection closed" << std::endl;
+                    close(clientSock);
+                    clientNumber--;
+                    return;
+                }
+
+                buffer[bytesReceived] = '\0';
+                std::stringstream edgeStream(buffer);
+                int u, v, w;
+                if (!(edgeStream >> u >> v >> w)) {
+                    sendResponse(clientSock, "Invalid edge input\n");
+                    continue;
+                }
+
+                {
+                    std::lock_guard<std::mutex> lock(graphMutex);
+                    g->addEdge(u, v, w);
+                }
+            }
+
+            sendResponse(clientSock, "Graph creation complete with " + std::to_string(m) + " edges.\n");
+
+        } else if (cmd == "Prim" || cmd == "Kruskal") {
             {
                 std::lock_guard<std::mutex> lock(graphMutex);
                 if (!g || g->getAdj().empty()) {
                     sendResponse(clientSock, "Graph not initialized\n");
                     continue;
                 }
-            }
 
-            factory.setStrategy(std::make_unique<PrimStrategy>());
-            {
-                std::lock_guard<std::mutex> lock(treeMutex);
-                mst = factory.createMST(g);
-            }
-            sendResponse(clientSock, "MST created using Prim's algorithm.\n" + mst->printMST());
-
-        } else if (cmd == "Kruskal") {
-            {
-                std::lock_guard<std::mutex> lock(graphMutex);
-                if (!g || g->getAdj().empty()) {
-                    sendResponse(clientSock, "Graph not initialized\n");
-                    continue;
+                if (cmd == "Prim") {
+                    factory.setStrategy(std::make_unique<PrimStrategy>());
+                } else if (cmd == "Kruskal") {
+                    factory.setStrategy(std::make_unique<KruskalStrategy>());
                 }
-            }
 
-            factory.setStrategy(std::make_unique<KruskalStrategy>());
-            {
-                std::lock_guard<std::mutex> lock(treeMutex);
                 mst = factory.createMST(g);
             }
-            sendResponse(clientSock, "MST created using Kruskal's algorithm.\n" + mst->printMST());
+
+            sendResponse(clientSock, "MST created using " + cmd + "'s algorithm.\n" + mst->printMST());
 
         } else if (cmd == "MSTweight") {
-            {
-                std::lock_guard<std::mutex> lock(treeMutex);
-                if (!mst) {
-                    sendResponse(clientSock, "MST not created\n");
-                    continue;
-                }
+            std::lock_guard<std::mutex> lock(treeMutex);
+            if (!mst) {
+                sendResponse(clientSock, "MST not created\n");
+                continue;
             }
             sendResponse(clientSock, "Total weight of the MST is: " + std::to_string(mst->totalWeight()) + "\n");
 
         } else if (cmd == "LongestPath") {
-            {
-                std::lock_guard<std::mutex> lock(treeMutex);
-                if (!mst) {
-                    sendResponse(clientSock, "MST not created\n");
-                    continue;
-                }
+            std::lock_guard<std::mutex> lock(treeMutex);
+            if (!mst) {
+                sendResponse(clientSock, "MST not created\n");
+                continue;
             }
+
             auto [distance, path] = mst->shortestPath();
             sendResponse(clientSock, "Longest path length: " + std::to_string(distance) + "\nPath: " + path);
 
         } else if (cmd == "ShortestPath") {
-            {
-                std::lock_guard<std::mutex> lock(treeMutex);
-                if (!mst) {
-                    sendResponse(clientSock, "MST not created\n");
-                    continue;
-                }
+            std::lock_guard<std::mutex> lock(treeMutex);
+            if (!mst) {
+                sendResponse(clientSock, "MST not created\n");
+                continue;
             }
+
             auto [distance, path] = mst->shortestPath();
             sendResponse(clientSock, "Shortest path length: " + std::to_string(distance) + "\nPath: " + path);
 
         } else if (cmd == "AverDist") {
-            {
-                std::lock_guard<std::mutex> lock(treeMutex);
-                if (!mst) {
-                    sendResponse(clientSock, "MST not created\n");
-                    continue;
-                }
+            std::lock_guard<std::mutex> lock(treeMutex);
+            if (!mst) {
+                sendResponse(clientSock, "MST not created\n");
+                continue;
             }
+
             float avgDistance = mst->averageDistanceEdges();
             sendResponse(clientSock, "Average distance between edges in the MST is: " + std::to_string(avgDistance) + "\n");
 
         } else if (cmd == "Exit") {
             sendResponse(clientSock, "Goodbye\n");
             close(clientSock);
-            {
-                std::lock_guard<std::mutex> lock(clientNumberMutex);
-                clientNumber--;
-            }
+            clientNumber--;
             break;
 
         } else {
@@ -237,10 +173,8 @@ void handleCommands(int clientSock, std::shared_ptr<Graph> &g, MSTFactory &facto
         }
     }
 }
+
 std::function<void(int)> signalHandlerLambda;
-//std::shared_ptr<Reactor> reactor;
-//std::unique_ptr<LFThreadPool> pool;
-bool serverRunning = true;
 
 void signalHandler(int signum) {
     if (signalHandlerLambda) {
@@ -260,47 +194,56 @@ int main() {
     std::shared_ptr<ConcreteEventHandler> acceptHandler;
 
     signalHandlerLambda = [&](int signum) {
-        std::lock_guard<std::mutex> coutLock(coutMutex);
-        std::cout << "Freeing memory and shutting down..." << std::endl;
+        {
+            std::lock_guard<std::mutex> coutLock(coutMutex);
+            std::cout << "Signal " << signum << " received, initiating shutdown..." << std::endl;
+        }
 
-        // Stop the server loop
-        serverRunning = false;
-
-        // Join all threads
-        for (auto& thread : threads) {
-            if (thread.joinable()) {
-                thread.join();
+        if (serverRunning.exchange(false)) {
+            // Close server socket to stop accepting new connections
+            {
+                std::lock_guard<std::mutex> lock(serverSockMutex);
+                if (serverSock >= 0) {
+                    close(serverSock);
+                    serverSock = -1;
+                }
             }
+
+            // Stop the reactor first to ensure no more events are processed
+            if (reactor) {
+                reactor->stop();
+            }
+
+            // Stop the thread pool to join all threads
+            if (pool) {
+                pool->stop();  // This will join all worker threads
+                pool.reset();  // Ensure the pool is destroyed
+            }
+
+            // Join all additional threads
+            {
+                std::lock_guard<std::mutex> lock(threadVectorMutex);
+                for (auto &thread : threads) {
+                    if (thread.joinable()) {
+                        thread.join();
+                    }
+                }
+            }
+
+            // Clean up resources
+            g.reset();
+            t.reset();
+
+            if (acceptHandler) {
+                reactor->removeHandler(acceptHandler, EventType::ACCEPT);
+                acceptHandler.reset();
+            }
+
+            reactor.reset();  // Ensure reactor is destroyed
         }
+        //exit(0);
 
-        // Reset shared resources
-        g.reset();
-        t.reset();
-
-        // Reset the handler explicitly
-        if (acceptHandler) {
-            reactor->removeHandler(acceptHandler, EventType::ACCEPT);
-            acceptHandler.reset();
-        }
-
-        // Stop reactor and pool if they exist
-        if (reactor) {
-            reactor->stop();
-            reactor.reset();
-        }
-
-        if (pool) {
-            pool->stop();
-            pool.reset();
-        }
-
-        // Close server socket
-        if (serverSock >= 0) {
-            close(serverSock);
-            serverSock = -1;
-        }
-
-        exit(signum);
+        // Do not use std::exit(0) inside the signal handler; instead, let the program exit normally
     };
 
     // Server socket setup
@@ -308,7 +251,7 @@ int main() {
     serverSock = socket(AF_INET, SOCK_STREAM, 0);
     if (serverSock < 0) {
         std::cerr << "Socket creation error" << std::endl;
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
     setsockopt(serverSock, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
@@ -320,12 +263,12 @@ int main() {
 
     if (bind(serverSock, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
         std::cerr << "Bind error" << std::endl;
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
     if (listen(serverSock, 10) < 0) {
         std::cerr << "Listen error" << std::endl;
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
     {
@@ -337,10 +280,11 @@ int main() {
     reactor = std::make_shared<Reactor>();
     pool = std::make_unique<LFThreadPool>(10, reactor);
 
-    acceptHandler = std::make_shared<ConcreteEventHandler>(
-        serverSock, [&, factoryPtr = &factory](int fd) mutable {
-            struct sockaddr_in clientAddr;
-            socklen_t sinSize = sizeof(clientAddr);
+acceptHandler = std::make_shared<ConcreteEventHandler>(
+    serverSock, [&, factoryPtr = &factory](int fd) mutable {
+        struct sockaddr_in clientAddr;
+        socklen_t sinSize = sizeof(clientAddr);
+        while (serverRunning.load()) {
             int clientSock = accept(fd, (struct sockaddr *)&clientAddr, &sinSize);
             if (clientSock >= 0) {
                 {
@@ -348,27 +292,36 @@ int main() {
                     std::cout << "New connection on socket " << clientSock << std::endl;
                 }
 
-                // Create a thread to handle the client's commands
-                threads.emplace_back([clientSock, &g, &t, factoryPtr]() mutable {
-                    handleCommands(clientSock, g, *factoryPtr, t);
-                });
+                {
+                    std::lock_guard<std::mutex> lock(threadVectorMutex);
+                    threads.emplace_back([clientSock, &g, &t, factoryPtr]() mutable {
+                        handleCommands(clientSock, g, *factoryPtr, t);
+                    });
+                }
+            } else if (errno == EINTR) {
+                // `accept` was interrupted by a signal
+                break;
+            } else if (!serverRunning.load()) {
+                // Server is shutting down, exit the loop
+                break;
             } else {
                 std::lock_guard<std::mutex> lock(cerrMutex);
                 std::cerr << "Error accepting connection on fd: " << fd << std::endl;
+                break;
             }
         }
-    );
+    }
+);
+
 
     reactor->registerHandler(acceptHandler, EventType::ACCEPT);
     pool->run();
 
     // Main loop to keep server running
-    while (serverRunning) {
-        std::this_thread::sleep_for(std::chrono::seconds(1));  // Keep the server alive
+    while (serverRunning.load()) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
-    // Trigger cleanup before exiting
-    signalHandlerLambda(SIGINT);
-
-    return 0;
+    // Cleanup is done in the signal handler lambda
+    return 0;  // Allow normal exit
 }
