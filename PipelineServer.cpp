@@ -28,63 +28,56 @@ std::mutex graphMutex;  // Protect access to the Graph object
 std::mutex mstMutex;    // Protect access to the MST object
 std::mutex coutMutex;   // Mutex for protecting cout
 std::mutex clientNumberMutex;
-int serverSock;  // Declare serverSock at the global or class scope
 std::atomic<bool> serverRunning(true);
 std::atomic<bool> shutdownInProgress(false); // Indicates if shutdown is in progress
 std::mutex shutdownMutex; // Protect shutdown operations
+// Add this declaration at the top of your file, outside of any function
+int serverSock=0;
+std::vector<std::thread> threads;
+std::mutex ioMutex;
+
+
 
 void initiateShutdown() {
-    {
-        std::lock_guard<std::mutex> lock(coutMutex);
-        cout << "Initiating server shutdown..." << endl;
-    }
+    // Set serverRunning to false to stop accepting new connections
+    serverRunning = false;
 
-    serverRunning = false; // Stop the server from accepting new connections
-    shutdownInProgress = true; // Indicate shutdown is in progress
-     //std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    // Close the server socket
+    close(serverSock);
 
-   // close(serverSock); // Close the server socket to unblock accept()
-//exit(0);
-    // Wait for all threads to finish (if you are tracking threads, join them here)
-}
-void signalHandler(int signum) {
-    {
-        std::lock_guard<std::mutex> lock(coutMutex);
-        cout << "\nInterrupt signal (" << signum << ") received. Press 's' to shutdown the server safely." << endl;
-    }
-
-    char input;
-    while (true) {
-        std::cin >> input;
-        if (input == 's' || input == 'S') {
-            initiateShutdown();
-            break;
-        } else {
-            std::lock_guard<std::mutex> lock(coutMutex);
-            cout << "Invalid input. Press 's' to shutdown the server safely." << endl;
+    // Join all client handling threads
+    for (std::thread &t : threads) {
+        if (t.joinable()) {
+            t.join();
         }
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(coutMutex);
+        cout << "All connections closed. Server shutdown complete." << endl;
+    }
+
+    // Exit the program
+    std::exit(0);  // Use std::exit instead of quick_exit or _Exit
+}
+
+
+void signalHandler(int signum) {
+    if (signum == SIGINT) {
+        initiateShutdown();
     }
 }
 
 
 void executePipeline(vector<unique_ptr<ActiveObject>> &pipeline) {
-    std::lock_guard<std::mutex> lock(pipelineMutex);  // Lock the mutex before accessing the pipeline
-
     for (auto &stage : pipeline) {
         stage->enqueue([]{});  // Access the ActiveObject in a thread-safe manner
     }
-
     std::this_thread::sleep_for(std::chrono::milliseconds(50));  // Wait for tasks to complete
 }
 
 int scanGraph(int &n, int &m, stringstream &ss, std::shared_ptr<Graph> &g) {
-    std::lock_guard<std::mutex> lock(graphMutex);  // Lock the graph mutex
-
-    {
-        std::lock_guard<std::mutex> coutLock(coutMutex);  // Lock the cout mutex
-        cout << "scanGraph: Lock acquired" << endl;
-    }
-
+    std::shared_ptr<Graph> newGraph;
     if (!(ss >> n >> m) || n <= 0 || m < 0) {
         std::lock_guard<std::mutex> cerrLock(coutMutex);  // Lock the cerr mutex (shared with cout)
         cerr << "scanGraph: Invalid graph input (n: " << n << ", m: " << m << ")" << endl;
@@ -96,12 +89,15 @@ int scanGraph(int &n, int &m, stringstream &ss, std::shared_ptr<Graph> &g) {
         cout << "scanGraph: Parsed n = " << n << ", m = " << m << endl;
     }
 
-    g = std::make_shared<Graph>(n, m);  // Assign the new graph
+    newGraph = std::make_shared<Graph>(n, m);  // Create the new graph
 
     {
         std::lock_guard<std::mutex> coutLock(coutMutex);  // Lock the cout mutex
         cout << "scanGraph: Graph created with " << n << " vertices and " << m << " edges." << endl;
     }
+
+    std::lock_guard<std::mutex> lock(graphMutex);  // Lock graphMutex only when assigning the new graph
+    g = std::move(newGraph);  // Assign the new graph to the shared graph object
 
     return 0;
 }
@@ -144,7 +140,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
         int bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
 
         if (bytesReceived <= 0) {
-            std::lock_guard<std::mutex> lock(clientNumberMutex);  // Protect clientNumber
+            std::lock_guard<std::mutex> lock(clientNumberMutex);
             clientNumber--;
 
             if (bytesReceived == 0) {
@@ -186,20 +182,20 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
             sendResponse(clientSock, "Graph created with " + to_string(n) + " vertices. Please send " + to_string(m) + " edges.\n");
 
             for (int i = 0; i < m; ++i) {
-                bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
+                int bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
                 if (bytesReceived <= 0) {
                     std::lock_guard<std::mutex> lock(clientNumberMutex);
                     clientNumber--;
                     if (bytesReceived == 0) {
                         {
                             std::lock_guard<std::mutex> coutLock(coutMutex);
-                            cout << "Connection closed" << endl;
+                            cout << "Connection closed while receiving edges." << endl;
                         }
                         break;
                     } else {
                         {
                             std::lock_guard<std::mutex> coutLock(coutMutex);
-                            cerr << "recv error" << endl;
+                            cerr << "recv error while receiving edges" << endl;
                         }
                     }
                     close(clientSock);
@@ -214,54 +210,61 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
                     sendResponse(clientSock, "Invalid edge input\n");
                     continue;
                 }
+
                 {
                     std::lock_guard<std::mutex> graphLock(graphMutex);  // Protect Graph access
                     g->addEdge(u, v, w);
+                    std::lock_guard<std::mutex> coutLock(coutMutex);
+                    cout << "Edge added: " << u << " -- " << v << " (weight " << w << ")" << endl;
                 }
             }
 
             sendResponse(clientSock, "Graph creation complete with " + to_string(m) + " edges.\n");
 
         } else if (cmd == "Prim" || cmd == "Kruskal") {
-            {
-                std::lock_guard<std::mutex> graphLock(graphMutex);  // Protect Graph access
-                if (g->getAdj().empty()) {
-                    sendResponse(clientSock, "Graph not initialized\n");
-                    continue;
-                }
-            }
+    std::shared_ptr<Graph> localGraph;
+    {
+        std::lock_guard<std::mutex> graphLock(graphMutex);
+        localGraph = g;  // Access the shared graph in a thread-safe manner
+        if (localGraph->getAdj().empty()) {
+            sendResponse(clientSock, "Graph not initialized\n");
+            continue;
+        }
+    }
 
-            setupPipeline(pipeline, cmd);  // cmd can be "Prim" or "Kruskal"
+    setupPipeline(pipeline, cmd);  // Set up pipeline
 
-            pipeline[0]->enqueue([&factory, cmd]() {
-                if (cmd == "Prim") {
-                    factory.setStrategy(make_unique<PrimStrategy>());
-                } else if (cmd == "Kruskal") {
-                    factory.setStrategy(make_unique<KruskalStrategy>());
-                }
-            });
+    pipeline[0]->enqueue([&factory, cmd]() {
+        if (cmd == "Prim") {
+            factory.setStrategy(make_unique<PrimStrategy>());
+        } else if (cmd == "Kruskal") {
+            factory.setStrategy(make_unique<KruskalStrategy>());
+        }
+    });
 
-            pipeline[0]->enqueue([&g, &factory, &mst]() {
-                std::lock_guard<std::mutex> mstLock(mstMutex);      // Protect MST modification
-                mst = factory.createMST(g);
-            });
+    pipeline[0]->enqueue([localGraph, &factory, &mst]() {
+        std::lock_guard<std::mutex> mstLock(mstMutex);
+        mst = factory.createMST(localGraph);  // Use the local copy of the graph
+    });
 
-            pipeline[0]->enqueue([clientSock, &mst, cmd]() {
-                std::string future;
-                {
-                    std::lock_guard<std::mutex> mstLock(mstMutex);  // Protect MST access
-                    future = "MST created using " + cmd + "'s algorithm.\n";
-                    future += mst->printMST();
-                }
-                sendResponse(clientSock, future);
-            });
+    pipeline[0]->enqueue([clientSock, &mst, cmd]() {
+        std::string future;
+        {
+            std::lock_guard<std::mutex> mstLock(mstMutex);
+            future = "MST created using " + cmd + "'s algorithm.\n";
+            future += mst->printMST();
+        }
+        sendResponse(clientSock, future);
+    });
 
-            executePipeline(pipeline);
+    executePipeline(pipeline);
+
+
 
         } else if (cmd == "MSTweight" || cmd == "Shortestpath" || cmd == "Longestpath" || cmd == "Averdist") {
             std::shared_ptr<Tree> localMst;
             {
-                std::lock_guard<std::mutex> mstLock(mstMutex);  // Protect MST access
+                std::lock_guard<std::mutex> mstLock(mstMutex);
                 localMst = mst;
             }
 
@@ -295,7 +298,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
         } else if (cmd == "Exit") {
             sendResponse(clientSock, "Goodbye\n");
             close(clientSock);
-            std::lock_guard<std::mutex> lock(clientNumberMutex);  // Protect clientNumber
+            std::lock_guard<std::mutex> lock(clientNumberMutex);
             clientNumber--;
             break;
 
@@ -304,8 +307,6 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
         }
     }
 }
-
-
 
 int acceptConnection(int serverSock) {
     struct sockaddr_in clientAddr;
@@ -316,7 +317,6 @@ int acceptConnection(int serverSock) {
         return -1;
     }
 
-    // Lock the mutex to protect clientNumber and the printing of the client count
     {
         std::lock_guard<std::mutex> lock(clientNumberMutex);
         clientNumber++;
@@ -324,7 +324,6 @@ int acceptConnection(int serverSock) {
         char s[INET6_ADDRSTRLEN];
         inet_ntop(clientAddr.sin_family, &clientAddr.sin_addr, s, sizeof s);
 
-        // Lock the mutex to protect cout
         std::lock_guard<std::mutex> coutLock(coutMutex);
         cout << "New connection from " << s << " on socket " << clientSock << endl;
         cout << "Currently " << clientNumber << " clients connected" << endl;
@@ -333,7 +332,6 @@ int acceptConnection(int serverSock) {
     return clientSock;
 }
 
-
 int main() {
     signal(SIGINT, signalHandler);
     vector<unique_ptr<ActiveObject>> pipeline;
@@ -341,15 +339,7 @@ int main() {
     auto mst = std::make_shared<Tree>(); // Shared MST for all clients
     MSTFactory factory;
 
-    signalHandlerLambda = [&](int signum) {
-        std::lock_guard<std::mutex> coutLock(coutMutex);  // Protect cout
-        cout << "Freeing memory" << endl;
-        g.reset();
-        mst.reset();
-        for (auto &obj : pipeline) {
-            obj.reset();
-        }
-    };
+    vector<std::thread> threads;  // Vector to keep track of threads
 
     int serverSock;
     struct sockaddr_in serverAddr;
@@ -389,8 +379,6 @@ int main() {
         cout << "MST pipeline server waiting for requests on port " << port << endl;
     }
 
-    vector<std::thread> threads;  // Vector to keep track of threads
-
     while (true) {
         if (!serverRunning) {
             break;
@@ -409,15 +397,10 @@ int main() {
         });
     }
 
-    // Join all threads before exiting
-    for (auto& thread : threads) {
-        if (thread.joinable()) {
-            thread.join();
-        }
-    }
+    // Call initiateShutdown and pass the threads vector
+    initiateShutdown();
 
     signalHandlerLambda(SIGINT);
 
-    close(serverSock);
     return 0;
 }
