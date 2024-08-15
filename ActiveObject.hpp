@@ -7,6 +7,7 @@
 #include <condition_variable>
 #include <queue>
 #include <functional>
+#include <atomic>
 using namespace std;
 
 /*
@@ -35,7 +36,7 @@ private:
     mutex _mx; // Mutex to protect the task queue
     condition_variable _cv; // Condition variable to wake up the worker thread
     thread _worker; // Worker thread
-    bool _done; // Flag to signal the worker thread to stop
+    atomic<bool> _done; // Flag to signal the worker thread to stop
 
    /*
     * @brief 
@@ -51,6 +52,7 @@ public:
 
     ~ActiveObject();
     
+    void start();
     /*
     * @brief
     * This function enqueues a task to be executed by the worker thread.

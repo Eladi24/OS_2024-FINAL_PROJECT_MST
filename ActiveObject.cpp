@@ -2,15 +2,18 @@
 
 ActiveObject::~ActiveObject()
 {
-    {
-        unique_lock<mutex> lock(_mx);
-        // Let the worker thread know that it should stop
-        _done = true;
-    }
+    // Let the worker thread know that it should stop
+    _done.store(true);
     // Wake up the worker thread
-    _cv.notify_one();
+    _cv.notify_all();
     // Wait for the worker thread to finish its previous task
     _worker.join();
+}
+
+void ActiveObject::start()
+{
+    
+    _worker = thread(&ActiveObject::run, this);
 }
 
 
@@ -28,5 +31,8 @@ void ActiveObject::run()
             _tasks.pop();
         }
         task();
+        
+        cout << "Worker thread id: " << _worker.get_id() << "Finished task" << endl;
+
     }
 }

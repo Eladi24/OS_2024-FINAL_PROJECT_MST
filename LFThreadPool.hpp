@@ -34,6 +34,7 @@ enum class EventType
     DISCONNECT
 };
 
+
 class Handle
 {
 private:
@@ -49,6 +50,8 @@ class EventHandler
 protected:
     int _handle;
     function<void()> _callback;
+    
+    
 
 public:
     EventHandler(int fd, function<void()> callback) : _handle(fd), _callback(callback) {}
@@ -70,20 +73,23 @@ class ConcreteEventHandler : public EventHandler
 class Reactor
 {
 private:
+    fd_set _master;
     fd_set _readFds;
     int _maxFd;
-    map<int, shared_ptr<EventHandler>> _handlers;
+    map<int, function<void()>> _handlers;
 
 
 public:
     Reactor() : _maxFd(0)
     {
         FD_ZERO(&_readFds);
+        FD_ZERO(&_master);
         
     }
+
     ~Reactor();
-    int registerHandler(shared_ptr<EventHandler> handler, EventType type);
-    int removeHandler(shared_ptr<EventHandler> handler, EventType type);
+    void addHandle(int fd, function<void()> event);
+    void removeHandle(int fd);
     int handleEvents();
     int deactivateHandle(int fd, EventType type);
     int reactivateHandle(int fd, EventType type);
@@ -106,6 +112,7 @@ public:
     ~LFThreadPool();
     void promoteNewLeader();
     void join();
+    
     
 };
 
