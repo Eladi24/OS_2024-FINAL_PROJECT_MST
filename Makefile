@@ -22,6 +22,7 @@ LF_OBJ = $(LF_SRC:.cpp=.o)
 
 # Compile
 all: PipelineServer LFServer Demo
+	
 
 PipelineServer: $(LIB_TARGET) $(PIP_OBJ)
 	$(CXX) $(CXXFLAGS) -o $@ $(PIP_OBJ) ./$(LIB_TARGET)
@@ -50,6 +51,7 @@ pipeline_helgrind: PipelineServer
 
 # Rebuild
 rebuild: clean all
+	
 
 # Phony
 .PHONY: clean all rebuild pipeline_valgrind

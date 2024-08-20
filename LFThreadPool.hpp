@@ -95,16 +95,46 @@ public:
     int reactivateHandle(int fd, EventType type);
 };
 
+class ThreadContext
+{
+    private:
+        int _clientFd;
+        queue<function<void()>> _events;
+        thread _thread;
+        mutex _mx;
+        atomic<bool> _isAwake;
+    public:
+        ThreadContext() : _clientFd(-1), _isAwake(false) {}
+        ThreadContext(thread loop): _thread(move(loop)), _isAwake(false) {}
+        ThreadContext(ThreadContext&& other) noexcept :_clientFd(other._clientFd),_events(move(other._events)), _thread(move(other._thread)) {}
+        ThreadContext& operator=(ThreadContext&& other) noexcept;
+        ThreadContext(const ThreadContext& other) = delete;
+        ThreadContext& operator=(const ThreadContext& other) = delete;
+        ~ThreadContext() { if (_thread.joinable()) _thread.join(); }
+        void addEvent(function<void()> event) { _events.push(event); }
+        void addHandle(int fd) { _clientFd = fd; }
+        void executeEvents();
+        void join() { _thread.join(); }
+        thread::id getId() { return _thread.get_id(); }
+        bool operator==(const ThreadContext& other) { return _thread.get_id() == other._thread.get_id(); }
+        bool operator!=(const ThreadContext& other) { return _thread.get_id() != other._thread.get_id(); }
+        void wakeUp() { _isAwake.store(true); }
+        void sleep() { _isAwake.store(false); }
+        bool isAwake() { return _isAwake.load(); }
+        int getClientFd() const { return _clientFd; }
+        bool joinable() { return _thread.joinable(); }
+};
+
 class LFThreadPool
 {
 private:
-    vector<thread> _followers;
-    map<thread::id, atomic<bool>> _followersState;
+    
+    map<thread::id, ThreadContext> _followers;
     mutex _mx;
     condition_variable _condition;
     bool _stop; 
     shared_ptr<Reactor> _reactor;
-    thread::id _leader;
+    ThreadContext* _leader;
     void followerLoop();
     
 public:
@@ -112,8 +142,8 @@ public:
     ~LFThreadPool();
     void promoteNewLeader();
     void join();
-    
-    
+    void addFd(int fd, function<void()> event);
+    void addEvent(function<void()> event, int fd);
 };
 
 #endif
