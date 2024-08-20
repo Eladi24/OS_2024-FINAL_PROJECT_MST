@@ -22,7 +22,7 @@ int Reactor::handleEvents()
     fd_set readFds = _master;
     cout << "Thread " << this_thread::get_id() << " is trying to select" << endl;
     int nready = select(_maxFd + 1, &readFds, nullptr, nullptr, nullptr);
-    
+    cout << nready << " file descriptors are ready" << endl;
     if (nready == -1 && errno != EINTR)
     {
         cerr << "Error in select" << endl;
@@ -58,6 +58,8 @@ int Reactor::reactivateHandle(int fd, EventType type)
     return 0;
 }
 
+
+
 ThreadContext& ThreadContext::operator=(ThreadContext&& other) noexcept
 {
     if (this != &other)
@@ -82,6 +84,7 @@ void ThreadContext::executeEvents()
         }
         event();     
     }
+    
 }
 
 LFThreadPool::LFThreadPool(size_t numThreads, shared_ptr<Reactor> reactor)
@@ -102,15 +105,7 @@ LFThreadPool::LFThreadPool(size_t numThreads, shared_ptr<Reactor> reactor)
 LFThreadPool::~LFThreadPool()
 {
     cout << "LFThreadPool destructor" << endl;
-    // Stop all worker threads
-    {
-        unique_lock<mutex> lock(_mx);
-        _stop = true;
-    }
-
-    _condition.notify_all();
-   
-    join();
+    stopPool();
 }
 
 void LFThreadPool::promoteNewLeader()
@@ -142,6 +137,7 @@ void LFThreadPool::join()
 {
     for (auto &[id, follower] : _followers)
     {
+        // Cancel the thread
         if (follower.joinable())
         {
             cout << "Joining thread: " << id << endl;
@@ -156,11 +152,11 @@ void LFThreadPool::followerLoop()
     {
         unique_lock<mutex> lock(_mx);
         // Wait until this thread becomes the leader or stop is signaled
-        _condition.wait(lock, [this] { return (_leader != nullptr && _leader->isAwake()) || _stop; });
+        _condition.wait(lock, [this] { return (_leader != nullptr && _leader->isAwake()) || _stop.load(); });
 
         cout << "Follower thread " << this_thread::get_id() << " has woken up" << endl;
         // If stop then the program is shutting down
-        if (_stop)
+        if (_stop.load())
             break;
 
         // Handle events in the reactor
@@ -200,4 +196,14 @@ void LFThreadPool::addEvent(function<void()> event, int fd)
         } 
     }
     cout << "Could not find the follower with fd: " << fd << endl;
+}
+
+void LFThreadPool::stopPool()
+{
+    // Stop all worker threads
+    _stop.store(true);
+    
+    _condition.notify_all();
+   
+    join();
 }

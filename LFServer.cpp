@@ -60,7 +60,7 @@ int scanSrcDest(stringstream &ss, int &src, int &dest)
     return 0;
 }
 
-void handleCommands(int clientSock, LFThreadPool &pool, unique_ptr<Graph> &g, MSTFactory &factory, unique_ptr<Tree> &mst)
+void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, unique_ptr<Tree> &mst)
 {
     cout << "Client socket in handleCommands: " << clientSock << endl;
     char buffer[1024];
@@ -332,9 +332,9 @@ void acceptConnection(int server_sock, unique_ptr<Graph> &g, MSTFactory &factory
     cout << "Currently " << clientNumber << " clients connected" << endl;
     cout << "Server socket: " << server_sock << " Client socket: " << client_sock << endl;
     // Create new event handler for handling the commands and add it to the reactor
-    function<void()> commandHandler = [&client_sock, &g, &factory, &mst, &pool]()
+    function<void()> commandHandler = [&client_sock, &g, &factory, &mst]()
     {
-        handleCommands(client_sock, pool, g, factory, mst);
+        handleCommands(client_sock, g, factory, mst);
     };
     pool.addFd(client_sock, commandHandler);
     cout << "Client: " << client_sock << " was assigned to thread: " << this_thread::get_id() << endl;
@@ -348,16 +348,20 @@ int main()
     unique_ptr<Graph> g;
     unique_ptr<Tree> t;
     MSTFactory factory;
-    unique_ptr<thread::id> leader = make_unique<thread::id>(this_thread::get_id());
+    unique_ptr<LFThreadPool> pool;
+    // The server socket
+    int serverSock;
     signalHandlerLambda = [&](int signum)
     {
         cout << "Freeing memory" << endl;
+        close(serverSock);
         g.reset();
         t.reset();
         reactor.reset();
+        pool.reset();
+        
     };
-    // The server socket
-    int serverSock;
+    
     struct sockaddr_in serverAddr;
     // The opt variable is used to set the socket options
     int opt = 1;
@@ -400,9 +404,9 @@ int main()
     cout << "Server socket: " << serverSock << endl;
 
     // Add the acceptConnection function to the reactor as a lambda function
-    LFThreadPool pool(10, reactor);
+    pool = make_unique<LFThreadPool>(10, reactor);
     reactor->addHandle(serverSock, [serverSock, &g, &factory, &t, &pool]()
-                       { acceptConnection(serverSock, g, factory, t, pool); });
+                       { acceptConnection(serverSock, g, factory, t, *pool); });
     // Allow the threads in the pool to run without the finishing the server
     cout << "Server running on thread: " << this_thread::get_id() << endl;
     while (true)

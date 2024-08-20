@@ -93,6 +93,7 @@ public:
     int handleEvents();
     int deactivateHandle(int fd, EventType type);
     int reactivateHandle(int fd, EventType type);
+    
 };
 
 class ThreadContext
@@ -104,6 +105,7 @@ class ThreadContext
         thread _thread;
         mutex _mx;
         atomic<bool> _isAwake;
+        
     public:
         ThreadContext() : _clientFd(-1), _isAwake(false) {}
         ThreadContext(thread loop): _thread(move(loop)), _isAwake(false) {}
@@ -124,6 +126,9 @@ class ThreadContext
         bool isAwake() { return _isAwake.load(); }
         int getClientFd() const { return _clientFd; }
         bool joinable() { return _thread.joinable(); }
+        
+        
+        
 };
 
 class LFThreadPool
@@ -133,7 +138,7 @@ private:
     map<thread::id, ThreadContext> _followers;
     mutex _mx;
     condition_variable _condition;
-    bool _stop; 
+    atomic<bool> _stop;
     shared_ptr<Reactor> _reactor;
     ThreadContext* _leader;
     void followerLoop();
@@ -143,6 +148,8 @@ public:
     ~LFThreadPool();
     void promoteNewLeader();
     void join();
+    
+    void stopPool();
     void addFd(int fd, function<void()> event);
     void addEvent(function<void()> event, int fd);
 };

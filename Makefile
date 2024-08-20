@@ -25,10 +25,10 @@ all: PipelineServer LFServer Demo
 	
 
 PipelineServer: $(LIB_TARGET) $(PIP_OBJ)
-	$(CXX) $(CXXFLAGS) -o $@ $(PIP_OBJ) ./$(LIB_TARGET)
+	$(CXX) $(CXXFLAGS) -o $@ $(PIP_OBJ) ./$(LIB_TARGET) -lpthread
 
 LFServer: $(LIB_TARGET) $(LF_OBJ)
-	$(CXX) $(CXXFLAGS) -o $@ $(LF_OBJ) ./$(LIB_TARGET)
+	$(CXX) $(CXXFLAGS) -o $@ $(LF_OBJ) ./$(LIB_TARGET) -lpthread
 
 Demo: $(LIB_TARGET) Demo.o
 	$(CXX) $(CXXFLAGS) -o $@ Demo.o ./$(LIB_TARGET)
@@ -41,13 +41,21 @@ $(LIB_TARGET): $(LIB_OBJ)
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -fPIC -c $<
 
-# Valgrind
+# Valgrind Pipeline Server
 pipeline_valgrind: PipelineServer
 	$(Valgrind_FLAGS) ./PipelineServer
 
-# Helgrind
+# Helgrind Pipeline Server
 pipeline_helgrind: PipelineServer
 	$(Helgrind_FLAGS) ./PipelineServer
+
+# Valgrind LF Server
+lf_valgrind: LFServer
+	$(Valgrind_FLAGS) ./LFServer
+
+# Helgrind LF Server
+lf_helgrind: LFServer
+	$(Helgrind_FLAGS) ./LFServer
 
 # Rebuild
 rebuild: clean all
