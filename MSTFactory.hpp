@@ -23,6 +23,7 @@ class MSTFactory
         * @return Tree* The minimum spanning tree of the graph g.
         */
         unique_ptr<Tree> createMST(unique_ptr<Graph>& g);
+        void destroyStrategy(){_strategy.reset();}
 };
 
 #endif

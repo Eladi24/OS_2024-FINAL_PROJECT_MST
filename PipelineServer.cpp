@@ -17,6 +17,7 @@ const int port = 4050;
 function<void(int)> signalHandlerLambda;
 int clientNumber = 0;
 mutex graphLock;
+mutex futureLock;
 
 void signalHandler(int signum)
 {
@@ -59,30 +60,6 @@ int scanSrcDest(stringstream &ss, int &src, int &dest)
     return 0;
 }
 
-
-
-void setupPipeline(vector<unique_ptr<ActiveObject>> &pipeline)
-{
-    // ActiveObject for creating the Graph
-    auto graphAO = make_unique<ActiveObject>();
-    
-    // ActiveObject for finding MST using Prim's algorithm
-    auto primAO = make_unique<ActiveObject>();
-    
-    auto kruskalAO = make_unique<ActiveObject>();
-    
-    // ActiveObject for computing MST weight
-    auto mstWeightAO = make_unique<ActiveObject>();
-    
-    // ActiveObject for finding shortest path
-    auto shortestPathAO = make_unique<ActiveObject>();
-    
-    // ActiveObject for finding longest path
-    auto longestPathAO = make_unique<ActiveObject>();
-    
-    // ActiveObject for computing average distance
-    auto averageDistanceAO = make_unique<ActiveObject>();
-}
 
 void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, unique_ptr<Graph> &g, MSTFactory &factory, unique_ptr<Tree> &mst)
 {
@@ -182,8 +159,8 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
             unique_lock<mutex> guard(graphLock, try_to_lock);
             if (!guard.owns_lock())
             {
-                future = "Graph is being used by another thread can't search for MST prim.\n";
-                sendResponse(clientSock, future);
+                
+                sendResponse(clientSock, "Graph is being used by another thread can't search for MST prim.\n");
                 continue;
             }
 
@@ -206,7 +183,8 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
                                  { mst = factory.createMST(g); });
             future = "MST created using Prim's algorithm.\n";
             pipeline[1]->enqueue([&mst, &future]()
-                                 { future += mst->printMST(); });
+                                 {  unique_lock<mutex> guard(futureLock, try_to_lock);
+                                    future += mst->printMST(); });
             this_thread::sleep_for(chrono::milliseconds(1));
         }
         else if (cmd == "Kruskal")
@@ -214,8 +192,8 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
             unique_lock<mutex> guard(graphLock, try_to_lock);
             if (!guard.owns_lock())
             {
-                future = "Graph is being used by another thread can't search for MST Kruskal.\n";
-                sendResponse(clientSock, future);
+                
+                sendResponse(clientSock, "Graph is being used by another thread can't search for MST Kruskal.\n");
                 continue;
             }
             if (g == nullptr || g->getAdj().empty())
@@ -238,7 +216,8 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
             future = "MST created using Kruskal's algorithm.\n";
             // Add to the queue the function to print the MST
             pipeline[2]->enqueue([&mst, &future]()
-                                 { future += mst->printMST(); });
+                                 { unique_lock<mutex> guard(futureLock, try_to_lock);
+                                    future += mst->printMST(); });
             this_thread::sleep_for(chrono::milliseconds(1));
         }
 
@@ -255,7 +234,8 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
 
             // Add to the queue the function to compute the total weight of the MST
             pipeline[3]->enqueue([&mst, &future]()
-                                 { future += to_string(mst->totalWeight()) + "\n"; });
+                                 {  unique_lock<mutex> guard(futureLock, try_to_lock);
+                                    future += to_string(mst->totalWeight()) + "\n"; });
             this_thread::sleep_for(chrono::milliseconds(1));
         }
 
@@ -279,7 +259,8 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
             future = "Shortest path from " + to_string(src) + " to " + to_string(dest) + " is: ";
             // Add to the queue the function to find the shortest path
             pipeline[4]->enqueue([&mst, &src, &dest, &future]()
-                                 { future += mst->shortestPath(src, dest); });
+                                 {  unique_lock<mutex> guard(futureLock, try_to_lock);
+                                    future += mst->shortestPath(src, dest); });
             this_thread::sleep_for(chrono::milliseconds(1));
         }
         else if (cmd == "Longestpath")
@@ -301,7 +282,8 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
             future = "Longest path from " + to_string(src) + " to " + to_string(dest) + " is: ";
             // Add to the queue the function to find the longest path
             pipeline[5]->enqueue([&mst, &src, &dest, &future]()
-                                 { future += mst->longestPath(src, dest); });
+                                 {  unique_lock<mutex> guard(futureLock, try_to_lock);
+                                    future += mst->longestPath(src, dest); });
             this_thread::sleep_for(chrono::milliseconds(1));
         }
         else if (cmd == "Averdist")
@@ -316,7 +298,8 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
            future = "Average distance of the MST is: ";
             // Add to the queue the function to compute the average distance
             pipeline[6]->enqueue([&mst, &future]()
-                                 { future += to_string(mst->averageDistanceEdges()) + "\n"; });
+                                 {  unique_lock<mutex> guard(futureLock, try_to_lock);
+                                    future += to_string(mst->averageDistanceEdges()) + "\n"; });
             
             this_thread::sleep_for(chrono::milliseconds(1));
             
@@ -367,6 +350,7 @@ int main()
     signalHandlerLambda = [&](int signum)
     {
         cout << "Freeing memory" << endl;
+        factory.destroyStrategy();
         mst.reset();
         g.reset();
         for (auto &obj : pipeline)
@@ -419,7 +403,10 @@ int main()
     cout << "MST pipeline server waiting for requests on port " << port << endl;
     // The pipeline of active objects
 
-    setupPipeline(pipeline);
+    for (int i = 0; i < 7; i++)
+    {
+        pipeline.push_back(make_unique<ActiveObject>());
+    }
     // Accept connections and handle commands
     while (true)
     {
@@ -437,12 +424,6 @@ int main()
                                  clientHandler->enqueue([newClientSock, &pipeline, &g, &factory, &mst]()
                                                         { handleCommands(newClientSock, pipeline, g, factory, mst); }); });
         clientThread.detach();
-    }
-    mst.reset();
-    g.reset();
-    for (auto &obj : pipeline)
-    {
-        obj.reset();
     }
     close(serverSock);
     return 0;

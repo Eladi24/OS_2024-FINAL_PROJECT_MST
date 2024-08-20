@@ -2,6 +2,7 @@
 
 ActiveObject::~ActiveObject()
 {
+    cout << "ActiveObject destructor" << endl;
     // Let the worker thread know that it should stop
     _done.store(true);
     // Wake up the worker thread
