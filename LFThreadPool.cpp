@@ -20,7 +20,9 @@ void Reactor::removeHandle(int fd)
 int Reactor::handleEvents()
 {
     fd_set readFds = _master;
+    cout << "Thread " << this_thread::get_id() << " is trying to select" << endl;
     int nready = select(_maxFd + 1, &readFds, nullptr, nullptr, nullptr);
+    
     if (nready == -1 && errno != EINTR)
     {
         cerr << "Error in select" << endl;
@@ -124,7 +126,6 @@ void LFThreadPool::promoteNewLeader()
     // Find the next thread to be the leader
     for (auto &[id, follower] : _followers)
     {
-        cout << "This is test " << id << endl;
         if (&follower != _leader && !follower.isAwake())
         {
             cout << "Promoting new leader: " << follower.getId() << endl;
@@ -163,15 +164,17 @@ void LFThreadPool::followerLoop()
             break;
 
         // Handle events in the reactor
+        
         _reactor->handleEvents();
         // Promote a new leader
         ThreadContext* currThread = _leader;
         promoteNewLeader();
-        cout << "New leader: " << _leader->getId() << endl;
+        
         // Release the lock
         lock.unlock();
         // Execute events in the thread context
         currThread->executeEvents();
+        cout << "Finished executing events" << endl;
         // Put the thread to sleep
         currThread->sleep();
     }

@@ -100,6 +100,7 @@ class ThreadContext
     private:
         int _clientFd;
         queue<function<void()>> _events;
+        function<void()> _event;
         thread _thread;
         mutex _mx;
         atomic<bool> _isAwake;

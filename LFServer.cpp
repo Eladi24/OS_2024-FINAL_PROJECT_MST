@@ -16,6 +16,7 @@ const int port = 4050;
 function<void(int)> signalHandlerLambda;
 int clientNumber = 0;
 mutex graphMutex;
+mutex clientNumMutex;
 
 void signalHandler(int signum)
 {
@@ -71,7 +72,9 @@ void handleCommands(int clientSock, LFThreadPool &pool, unique_ptr<Graph> &g, MS
         bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
         if (bytesReceived <= 0)
         {
+            unique_lock<mutex> guard(clientNumMutex);
             clientNumber--;
+            guard.unlock();
             if (bytesReceived == 0)
             {
                 cout << "Connection closed" << endl;
@@ -130,7 +133,9 @@ void handleCommands(int clientSock, LFThreadPool &pool, unique_ptr<Graph> &g, MS
                     bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
                     if (bytesReceived <= 0)
                     {
+                        unique_lock<mutex> guard(clientNumMutex);
                         clientNumber--;
+                        guard.unlock();
                         if (bytesReceived == 0)
                         {
                             cout << "Connection closed" << endl;
@@ -145,8 +150,7 @@ void handleCommands(int clientSock, LFThreadPool &pool, unique_ptr<Graph> &g, MS
                     ss.str(buffer);
                     ss >> u >> v >> w;
                     // Add the event to the pool
-                    pool.addEvent([clientSock, &g, u, v, w]()
-                                  { g->addEdge(u, v, w); }, clientSock);
+                    g->addEdge(u, v, w);
                     
                 }
             }
@@ -175,18 +179,14 @@ void handleCommands(int clientSock, LFThreadPool &pool, unique_ptr<Graph> &g, MS
                 mst = nullptr;
             }
             
-            // Add the event to the pool
-            pool.addEvent([clientSock, &factory]()
-                          { factory.setStrategy(new PrimStrategy()); }, clientSock);
+            
+            factory.setStrategy(new PrimStrategy());
 
-            // Add the event to the pool
-            pool.addEvent([clientSock, &g, &factory, &mst]()
-                          { mst = factory.createMST(g); }, clientSock);
+            mst = factory.createMST(g);
 
             response = "MST created using Prim's algorithm.\n";
-            // Add the event to the pool
-            pool.addEvent([clientSock, &mst, &response]()
-                          { response += mst->printMST(); }, clientSock);
+            
+            response += mst->printMST();
 
             this_thread::sleep_for(chrono::milliseconds(1));
         }
@@ -211,18 +211,12 @@ void handleCommands(int clientSock, LFThreadPool &pool, unique_ptr<Graph> &g, MS
             }
             
 
-           // Add the event to the pool
-            pool.addEvent([clientSock, &factory]()
-                          { factory.setStrategy(new KruskalStrategy()); }, clientSock);
+           factory.setStrategy(new KruskalStrategy());
             
-            // Add the event to the pool
-            pool.addEvent([clientSock, &g, &factory, &mst]()
-                          { mst = factory.createMST(g); }, clientSock);
+            mst = factory.createMST(g);
 
             response = "MST created using Kruskal's algorithm.\n";
-            // Add the event to the pool
-            pool.addEvent([clientSock, &mst, &response]()
-                          { response += mst->printMST(); }, clientSock);
+            response += mst->printMST();
 
             this_thread::sleep_for(chrono::milliseconds(1));
         }
@@ -236,9 +230,7 @@ void handleCommands(int clientSock, LFThreadPool &pool, unique_ptr<Graph> &g, MS
             }
             response = "Total weight of the MST is: ";
 
-            // Add the event to the pool
-            pool.addEvent([clientSock, &mst, &response]()
-                          { response += to_string(mst->totalWeight()) + "\n"; }, clientSock);
+            response += to_string(mst->totalWeight()) + "\n";
             
 
             this_thread::sleep_for(chrono::milliseconds(1));
@@ -254,18 +246,14 @@ void handleCommands(int clientSock, LFThreadPool &pool, unique_ptr<Graph> &g, MS
 
             int src, dest;
             int res;
-            // Add the event to the pool
-            pool.addEvent([clientSock, &ss, &src, &dest, &res]()
-                          { res = scanSrcDest(ss, src, dest); }, clientSock);
+            res = scanSrcDest(ss, src, dest);
             
             this_thread::sleep_for(chrono::milliseconds(1));
 
             if (res == -1)
                 continue;
             response = "Shortest path from " + to_string(src) + " to " + to_string(dest) + " is: ";
-            // Add the event to the pool
-            pool.addEvent([&mst, src, dest, &response]()
-                            { response += mst->shortestPath(src, dest); }, clientSock);
+            response += mst->shortestPath(src, dest);
 
             this_thread::sleep_for(chrono::milliseconds(1));
         }
@@ -280,15 +268,13 @@ void handleCommands(int clientSock, LFThreadPool &pool, unique_ptr<Graph> &g, MS
             int src, dest;
             int res;
             
-            pool.addEvent([&ss, &src, &dest, &res]()
-                        { res = scanSrcDest(ss, src, dest); }, clientSock);
+            res = scanSrcDest(ss, src, dest);
 
             if (res == -1)
                 continue;
             response = "Longest path from " + to_string(src) + " to " + to_string(dest) + " is: ";
             
-            pool.addEvent([&mst, src, dest, &response]()
-                        { response += mst->longestPath(src, dest);}, clientSock);
+            response += mst->longestPath(src, dest);
 
             this_thread::sleep_for(chrono::milliseconds(1));
         }
@@ -301,9 +287,7 @@ void handleCommands(int clientSock, LFThreadPool &pool, unique_ptr<Graph> &g, MS
             }
 
             response = "Average distance of the MST is: ";
-            // Add to the queue the function to compute the average distance
-            pool.addEvent([clientSock, &mst, &response]()
-                          { response += to_string(mst->averageDistanceEdges()) + "\n"; }, clientSock);
+            response += to_string(mst->averageDistanceEdges()) + "\n";
 
             this_thread::sleep_for(chrono::milliseconds(1));
         }
@@ -313,7 +297,9 @@ void handleCommands(int clientSock, LFThreadPool &pool, unique_ptr<Graph> &g, MS
             cout << "Thread number " << this_thread::get_id() << " exiting" << endl;
             // Close the client socket
             close(clientSock);
+            unique_lock<mutex> guard(clientNumMutex);
             clientNumber--;
+            guard.unlock();
             break;
         }
         else
@@ -337,7 +323,9 @@ void acceptConnection(int server_sock, unique_ptr<Graph> &g, MSTFactory &factory
         perror("accept");
         return;
     }
+    unique_lock<mutex> guard(clientNumMutex);
     clientNumber++;
+    guard.unlock();
     char s[INET6_ADDRSTRLEN];
     inet_ntop(client_addr.sin_family, &client_addr.sin_addr, s, sizeof s);
     cout << "New connection from " << s << " on socket " << client_sock << endl;
