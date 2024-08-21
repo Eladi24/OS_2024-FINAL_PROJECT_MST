@@ -8,9 +8,12 @@ ActiveObject::~ActiveObject()
         cout << "ActiveObject destructor" << endl;
     }
     // Let the worker thread know that it should stop
-    _done.store(true);
+    _done.store(true, memory_order_release);
     // Wake up the worker thread
-    _cv.notify_all();
+    {
+        lock_guard<mutex> lock(_mx);
+        _cv.notify_all();
+    }
     // Wait for the worker thread to finish its previous task
     _worker.join();
 }
@@ -30,11 +33,11 @@ void ActiveObject::run()
     }
     while (true)
     {
-        std::function<void()> task;
+        function<void()> task;
         {
-            std::unique_lock<mutex> lock(_mx);
-            _cv.wait(lock, [this] { return _done.load() || !_tasks.empty(); });
-            if (_done && _tasks.empty()) return;
+            unique_lock<mutex> lock(_mx);
+            _cv.wait(lock, [this] { return _done.load(memory_order_acquire) || !_tasks.empty(); });
+            if (_done.load(memory_order_acquire) && _tasks.empty()) return;
             task = std::move(_tasks.front());
             _tasks.pop();
         }

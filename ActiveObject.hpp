@@ -68,10 +68,11 @@ public:
         unique_lock<mutex> lock(_mx);
         // Move the task into the task queue
         _tasks.emplace(task);
-        lock.unlock();
         // Wake up the worker thread
         _cv.notify_one();
     }
+
+    static mutex& getOutputMutex() { return _outputMx; }
     
 };
 

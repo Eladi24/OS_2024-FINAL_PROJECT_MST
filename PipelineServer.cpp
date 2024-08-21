@@ -18,7 +18,7 @@ function<void(int)> signalHandlerLambda;
 int clientNumber = 0;
 mutex graphLock;
 mutex futureLock;
-mutex coutLock;
+mutex& coutLock = ActiveObject::getOutputMutex();
 atomic<bool> terminateFlag(false);
 
 struct functArgs
@@ -32,10 +32,12 @@ struct functArgs
 
 void signalHandler(int signum)
 {
-    unique_lock<mutex> guard(graphLock);
+    coutLock.lock();
     cout << "Interrupt signal (" << signum << ") received.\n";
+    coutLock.unlock();
     // Free memory
     terminateFlag.store(true);
+    unique_lock<mutex> guard(graphLock);
     signalHandlerLambda(signum);
     guard.unlock();
     exit(signum);
