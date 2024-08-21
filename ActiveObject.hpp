@@ -37,6 +37,7 @@ private:
     condition_variable _cv; // Condition variable to wake up the worker thread
     thread _worker; // Worker thread
     atomic<bool> _done; // Flag to signal the worker thread to stop
+    static mutex _outputMx; // Mutex to protect the output stream
 
    /*
     * @brief 
@@ -48,7 +49,7 @@ private:
     void run();
 
 public:
-    ActiveObject() : _worker(&ActiveObject::run, this), _done(false) {}
+    ActiveObject() :_tasks(), _worker(&ActiveObject::run, this), _done(false) {}
 
     ~ActiveObject();
     

@@ -121,7 +121,7 @@ void Tree::floydWarshall()
         distanceMap[i][i] = 0;
         for (Edge e : adj[i])
         {
-            distanceMap[i][e.dest] = e.weight;
+            distanceMap[i][e.dest - 1] = e.weight;
         }
     }
 
