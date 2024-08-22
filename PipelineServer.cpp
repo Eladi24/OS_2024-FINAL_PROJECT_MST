@@ -15,10 +15,11 @@
 
 const int port = 4050;
 function<void(int)> signalHandlerLambda;
-int clientNumber = 0;
+atomic<int> clientNumber(0);
 mutex graphLock;
 mutex futureLock;
-mutex& coutLock = ActiveObject::getOutputMutex();
+mutex &coutLock = ActiveObject::getOutputMutex();
+
 atomic<bool> terminateFlag(false);
 
 struct functArgs
@@ -47,6 +48,7 @@ void sendResponse(int clientSock, const string &future)
 {
     if (send(clientSock, future.c_str(), future.size(), 0) < 0)
     {
+        unique_lock<mutex> guard(coutLock);
         cerr << "send error" << endl;
     }
 }
@@ -56,6 +58,7 @@ int scanGraph(int &n, int &m, stringstream &ss, unique_ptr<Graph> &g)
 
     if (!(ss >> n >> m) || n <= 0 || m < 0)
     {
+        unique_lock<mutex> guard(coutLock);
         cerr << "Invalid graph input" << endl;
         return -1;
     }
@@ -65,13 +68,20 @@ int scanGraph(int &n, int &m, stringstream &ss, unique_ptr<Graph> &g)
     return 0;
 }
 
-int scanSrcDest(stringstream &ss, int &src, int &dest)
+int scanSrcDest(stringstream &ss, atomic<int> &src, atomic<int> &dest)
 {
-    if (!(ss >> src >> dest) || src < 0 || dest < 0)
+    int tempSrc, tempDest;
+
+    if (!(ss >> tempSrc >> tempDest) || tempSrc < 0 || tempDest < 0)
     {
+
         cerr << "Invalid source or destination" << endl;
         return -1;
     }
+
+    // Atomically update the atomic<int> variables
+    src.store(tempSrc, memory_order_release);
+    dest.store(tempDest, memory_order_release);
 
     return 0;
 }
@@ -79,6 +89,7 @@ int scanSrcDest(stringstream &ss, int &src, int &dest)
 void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, unique_ptr<Graph> &g, MSTFactory &factory, unique_ptr<Tree> &mst)
 {
     condition_variable cv;
+    mutex ssLock;
     atomic<bool> done(false);
     char buffer[1024] = {0};
     while (!terminateFlag.load())
@@ -87,9 +98,9 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
         int bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
         if (bytesReceived <= 0)
         {
-            clientNumber--;
+            clientNumber.store(clientNumber.load(memory_order_acquire) - 1, memory_order_release);
             if (bytesReceived == 0)
-            {   
+            {
                 unique_lock<mutex> guard(coutLock);
                 cout << "Connection closed" << endl;
                 break;
@@ -106,7 +117,11 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
 
         stringstream ss(command);
         string cmd;
-        ss >> cmd;
+        {
+            unique_lock<mutex> sguard(ssLock);
+            ss >> cmd;
+        }
+
         string future;
 
         if (cmd == "Newgraph")
@@ -125,57 +140,77 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
             }
             if (mst != nullptr)
             {
+
                 mst.reset();
                 mst = nullptr;
             }
             int n, m;
-            pipeline[0]->enqueue([&ss, &n, &m, &g]()
-                                 { scanGraph(n, m, ss, g); });
+            mutex initLock;
+            atomic<bool> initDone(false);
+            condition_variable initCV;
+            pipeline[0]->enqueue([&ss, &n, &m, &g, &ssLock, &initLock, &initDone, &initCV]()
+                                 {  
+                                    unique_lock<mutex> guard2(ssLock);
+                                    unique_lock<mutex> guard(initLock);
+                                    scanGraph(n, m, ss, g);
+                                    initDone.store(true, memory_order_release);
+                                    initCV.notify_one(); });
 
             // Wait for the graph to be created
-            this_thread::sleep_for(chrono::milliseconds(1));
+            while (!initDone)
+            {
+                unique_lock<mutex> guard(initLock);
+                initCV.wait(guard);
+            }
 
             for (int i = 0; i < m; i++)
             {
                 int u = 0, v = 0, w = 0;
 
                 // Attempt to read and parse the edge data
+                unique_lock<mutex> guard(ssLock);
                 if (!(ss >> u >> v >> w))
                 {
-                    
+
                     // Clear the stringstream and read new input from the socket
                     ss.clear();
                     ss.str("");
-
+                    guard.unlock();
+                    guard.release();
                     memset(buffer, 0, sizeof(buffer));
                     bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
 
                     // Check if we received valid data
                     if (bytesReceived <= 0)
                     {
-                        clientNumber--; // Decrement the client number as we're losing a client
+                        // Decrement the client number as we're losing a client
+                        clientNumber.store(clientNumber.load(memory_order_acquire) - 1, memory_order_release);
                         if (bytesReceived == 0)
-                        {   
+                        {
                             unique_lock<mutex> guard(coutLock);
                             cout << "Connection closed by client." << endl;
                             break;
                         }
                         else
                         {
+
                             cerr << "recv error: " << strerror(errno) << endl;
                             break;
                         }
                     }
 
                     // Load the new input into the stringstream
-                    ss.write(buffer, bytesReceived);
-
-                    // Attempt to parse again with the new data
-                    if (!(ss >> u >> v >> w))
                     {
-                        sendResponse(clientSock, "Invalid input format. Please enter 3 integers for u, v, and w.\n");
-                        i--; // Retry this iteration since we didn't get valid input
-                        continue;
+                        unique_lock<mutex> guard(ssLock);
+                        ss.write(buffer, bytesReceived);
+
+                        // Attempt to parse again with the new data
+                        if (!(ss >> u >> v >> w))
+                        {
+                            sendResponse(clientSock, "Invalid input format. Please enter 3 integers for u, v, and w.\n");
+                            i--; // Retry this iteration since we didn't get valid input
+                            continue;
+                        }
                     }
                 }
 
@@ -189,12 +224,16 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
 
                 // Add the edge to the graph via the pipeline
                 pipeline[0]->enqueue([&g, u, v, w]()
-                                     {  unique_lock<mutex> guard(graphLock, try_to_lock);
+                                     {  unique_lock<mutex> guard(graphLock);
                                         g->addEdge(u, v, w); });
             }
 
-            future = "Graph created with " + to_string(n) + " vertices and " + to_string(m) + " edges.\n";
-            done.store(true);
+            {
+                unique_lock<mutex> guard(futureLock);
+                future = "Graph created with " + to_string(n) + " vertices and " + to_string(m) + " edges.\n";
+                done.store(true, memory_order_release);
+                cv.notify_one();
+            }
         }
 
         else if (cmd == "Prim")
@@ -209,29 +248,31 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
 
             if (g == nullptr || g->getAdj().empty())
             {
-                cerr << "Graph not initialized" << endl;
-
+                sendResponse(clientSock, "Graph not initialized\n");
                 continue;
             }
+
             if (mst != nullptr)
             {
                 mst.reset();
                 mst = nullptr;
             }
 
-            // Add to the queue the function to set the strategy
-            pipeline[1]->enqueue([&factory]()
-                                 { factory.setStrategy(new PrimStrategy()); });
             pipeline[1]->enqueue([&g, &factory, &mst]()
-                                 { mst = factory.createMST(g); });
-            future = "MST created using Prim's algorithm.\n";
+                                 {  
+                                    factory.setStrategy(new PrimStrategy());
+                                    mst = factory.createMST(g); });
+            {
+                unique_lock<mutex> guard(futureLock);
+                future = "MST created using Prim's algorithm.\n";
+            }
+
             pipeline[1]->enqueue([&mst, &future, &cv, &done]()
-                                 {  unique_lock<mutex> guard(futureLock, try_to_lock);
+                                 {  unique_lock<mutex> guard(futureLock);
                                     future += mst->printMST();
-                                    done = true;
-                                    guard.unlock();
+                                    done.store(true, memory_order_release);
                                     cv.notify_one(); });
-            this_thread::sleep_for(chrono::milliseconds(1));
+            
         }
         else if (cmd == "Kruskal")
         {
@@ -244,30 +285,32 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
             }
             if (g == nullptr || g->getAdj().empty())
             {
-                cerr << "Graph not initialized" << endl;
+                sendResponse(clientSock, "Graph not initialized\n");
                 continue;
             }
             if (mst != nullptr)
             {
+
                 mst.reset();
                 mst = nullptr;
             }
 
-            // Add to the queue the function to set the strategy
-            pipeline[2]->enqueue([&factory]()
-                                 { factory.setStrategy(new KruskalStrategy()); });
             // Add to the queue the function to create the MST
             pipeline[2]->enqueue([&g, &factory, &mst]()
-                                 { mst = factory.createMST(g); });
-            future = "MST created using Kruskal's algorithm.\n";
+                                 {  
+                                    factory.setStrategy(new KruskalStrategy());
+                                    mst = factory.createMST(g); });
+            {
+                unique_lock<mutex> guard(futureLock);
+                future = "MST created using Kruskal's algorithm.\n";
+            }
             // Add to the queue the function to print the MST
             pipeline[2]->enqueue([&mst, &future, &cv, &done]()
-                                 { unique_lock<mutex> guard(futureLock, try_to_lock);
+                                 { unique_lock<mutex> guard(futureLock);
                                     future += mst->printMST();
-                                    done = true;
-                                    guard.unlock();
+                                    done.store(true, memory_order_release);
                                     cv.notify_one(); });
-            this_thread::sleep_for(chrono::milliseconds(1));
+            
         }
 
         else if (cmd == "MSTweight")
@@ -275,19 +318,22 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
 
             if (mst == nullptr)
             {
-                cerr << "MST not created" << endl;
+                sendResponse(clientSock, "MST not created\n");
                 continue;
             }
-            future = "Total weight of the MST is: ";
+
+            {
+                unique_lock<mutex> guard(futureLock);
+                future = "Total weight of the MST is: ";
+            }
 
             // Add to the queue the function to compute the total weight of the MST
             pipeline[3]->enqueue([&mst, &future, &cv, &done]()
-                                 {  unique_lock<mutex> guard(futureLock, try_to_lock);
+                                 {  unique_lock<mutex> guard(futureLock);
                                     future += to_string(mst->totalWeight()) + "\n";
-                                    done = true; 
-                                    guard.unlock();
+                                    done.store(true, memory_order_release); 
                                     cv.notify_one(); });
-            this_thread::sleep_for(chrono::milliseconds(1));
+            
         }
 
         else if (cmd == "Shortestpath")
@@ -295,77 +341,83 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
 
             if (mst == nullptr)
             {
-                cerr << "MST not created" << endl;
+                sendResponse(clientSock, "MST not created\n");
                 continue;
             }
 
-            int src, dest;
-            int res;
+            atomic<int> src, dest;
+            atomic<int> res;
             pipeline[4]->enqueue([&ss, &src, &dest, &res]()
-                                 { res = scanSrcDest(ss, src, dest); });
-            this_thread::sleep_for(chrono::milliseconds(1));
+                                 { res.store(scanSrcDest(ss, src, dest), memory_order_release); });
+            
 
-            if (res == -1)
+            if (res.load(memory_order_acquire) == -1)
                 continue;
-            future = "Shortest path from " + to_string(src) + " to " + to_string(dest) + " is: ";
+            {
+                unique_lock<mutex> guard(futureLock);
+                future = "Shortest path from " + to_string(src) + " to " + to_string(dest) + " is: ";
+            }
             // Add to the queue the function to find the shortest path
             pipeline[4]->enqueue([&mst, &src, &dest, &future, &cv, &done]()
-                                 {  unique_lock<mutex> guard(futureLock, try_to_lock);
+                                 {  unique_lock<mutex> guard(futureLock);
                                     future += mst->shortestPath(src, dest);
-                                    done = true;
-                                    guard.unlock();
+                                    done.store(true, memory_order_release);
                                     cv.notify_one(); });
-            this_thread::sleep_for(chrono::milliseconds(1));
+            
         }
         else if (cmd == "Longestpath")
         {
 
             if (mst == nullptr)
             {
-                cerr << "MST not created" << endl;
+                sendResponse(clientSock, "MST not created\n");
                 continue;
             }
 
-            int src, dest;
-            int res;
+            atomic<int> src, dest;
+            atomic<int> res;
             pipeline[5]->enqueue([&ss, &src, &dest, &res]()
-                                 { res = scanSrcDest(ss, src, dest); });
+                                 { res.store(scanSrcDest(ss, src, dest), memory_order_release); });
             if (res == -1)
                 continue;
-            future = "Longest path from " + to_string(src) + " to " + to_string(dest) + " is: ";
+            {
+                unique_lock<mutex> guard(futureLock);
+                future = "Longest path from " + to_string(src) + " to " + to_string(dest) + " is: ";
+            }
             // Add to the queue the function to find the longest path
             pipeline[5]->enqueue([&mst, &src, &dest, &future, &cv, &done]()
-                                 {  unique_lock<mutex> guard(futureLock, try_to_lock);
+                                 {  unique_lock<mutex> guard(futureLock);
                                     future += mst->longestPath(src, dest);
-                                    done = true;
-                                    guard.unlock();
+                                    done.store(true, memory_order_release);
                                     cv.notify_one(); });
-            this_thread::sleep_for(chrono::milliseconds(1));
+            
         }
         else if (cmd == "Averdist")
         {
 
             if (mst == nullptr)
             {
-                cerr << "MST not created" << endl;
+                sendResponse(clientSock, "MST not created\n");
                 continue;
             }
 
-            future = "Average distance of the MST is: ";
+            {
+                unique_lock<mutex> guard(futureLock);
+                future = "Average distance of the MST is: ";
+            }
             // Add to the queue the function to compute the average distance
             pipeline[6]->enqueue([&mst, &future, &cv, &done]()
-                                 {  unique_lock<mutex> guard(futureLock, try_to_lock);
+                                 {  unique_lock<mutex> guard(futureLock);
                                     future += to_string(mst->averageDistanceEdges()) + "\n";
-                                    done = true;
-                                    guard.unlock();
+                                    done.store(true, memory_order_release);
                                     cv.notify_one(); });
 
-            this_thread::sleep_for(chrono::milliseconds(1));
+            
         }
         else if (cmd == "Exit")
         {
             sendResponse(clientSock, "Goodbye\n");
-            clientNumber--;
+            clientNumber.store(clientNumber.load(memory_order_acquire) - 1, memory_order_release);
             break;
         }
         else
@@ -373,18 +425,20 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
             sendResponse(clientSock, "Invalid command" + cmd + "\n");
             continue;
         }
-        unique_lock<mutex> guard(futureLock, try_to_lock);
+        unique_lock<mutex> guard(futureLock);
         while (!done)
         {
             cv.wait(guard);
         }
         sendResponse(clientSock, future);
-        done = false;
+        done.store(false, memory_order_release);
         future.clear();
     }
     close(clientSock);
-    unique_lock<mutex> guard(coutLock);
-    cout << "Thread number " << this_thread::get_id() << " exiting" << endl;
+    {
+        unique_lock<mutex> guard(coutLock);
+        cout << "Thread number " << this_thread::get_id() << " exiting" << endl;
+    }
 }
 
 int acceptConnection(int server_sock)
@@ -397,12 +451,14 @@ int acceptConnection(int server_sock)
         perror("accept");
         return -1;
     }
-    clientNumber++;
+    clientNumber.store(clientNumber.load(memory_order_acquire) + 1, memory_order_release);
     char s[INET6_ADDRSTRLEN];
     inet_ntop(client_addr.sin_family, &client_addr.sin_addr, s, sizeof s);
-    unique_lock<mutex> guard(coutLock);
-    cout << "New connection from " << s << " on socket " << client_sock << endl;
-    cout << "Currently " << clientNumber << " clients connected" << endl;
+    {
+        unique_lock<mutex> guard(coutLock);
+        cout << "New connection from " << s << " on socket " << client_sock << endl;
+        cout << "Currently " << clientNumber.load(memory_order_acquire) << " clients connected" << endl;
+    }
     return client_sock;
 }
 
@@ -417,9 +473,9 @@ int main()
     MSTFactory factory;
     unique_ptr<Tree> mst;
     vector<pthread_t> clientThreads;
+    unique_ptr<functArgs> faPtr;
     signalHandlerLambda = [&](int signum)
-    {   
-        
+    {
         cout << "Freeing memory" << endl;
         cout << boolalpha << terminateFlag.load() << endl;
         for (auto &thread : clientThreads)
@@ -429,6 +485,7 @@ int main()
         }
         clientThreads.clear();
         clientThreads.shrink_to_fit();
+        faPtr.reset();
         factory.destroyStrategy();
         mst.reset();
         g.reset();
@@ -479,11 +536,12 @@ int main()
         cerr << "Listen error" << endl;
         exit(1);
     }
-    unique_lock<mutex> guard(coutLock);
-    cout << "MST pipeline server waiting for requests on port " << port << endl;
+
+    {
+        unique_lock<mutex> guard(coutLock);
+        cout << "MST pipeline server waiting for requests on port " << port << endl;
+    }
     // The pipeline of active objects
-    guard.unlock();
-    guard.release();
     for (int i = 0; i < 7; i++)
     {
         pipeline.push_back(make_unique<ActiveObject>());
@@ -497,15 +555,17 @@ int main()
             continue;
         }
         // create pthread for each client
-        functArgs fa = {newClientSock, ref(pipeline), ref(g), ref(factory), ref(mst)};
+        // functArgs fa = {newClientSock, ref(pipeline), ref(g), ref(factory), ref(mst)};
+        faPtr = unique_ptr<functArgs>(new functArgs{newClientSock, ref(pipeline), ref(g), ref(factory), ref(mst)});
         pthread_t tid;
         auto threadFunc = [](void *arg) -> void *
         {
             functArgs *fa = static_cast<functArgs *>(arg);
             handleCommands(fa->clientSock, fa->pipeline, fa->g, fa->factory, fa->mst);
+
             return nullptr;
         };
-        pthread_create(&tid, nullptr, threadFunc, &fa);
+        pthread_create(&tid, nullptr, threadFunc, faPtr.get());
         clientThreads.push_back(tid);
     }
     close(serverSock);

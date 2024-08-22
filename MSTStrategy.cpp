@@ -132,9 +132,9 @@ vector<Edge> KruskalStrategy::findMST(const Graph& g) {
     }
 
     // Print the MST
-    cout << "Edges in the constructed MST\n";
-    for (const auto& edge : result) {
-        cout << edge.src << " -- " << edge.dest << " == " << edge.weight << endl;
-    }
+    // cout << "Edges in the constructed MST\n";
+    // for (const auto& edge : result) {
+    //     cout << edge.src << " -- " << edge.dest << " == " << edge.weight << endl;
+    // }
     return result;
 }

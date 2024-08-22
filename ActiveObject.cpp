@@ -38,7 +38,7 @@ void ActiveObject::run()
             unique_lock<mutex> lock(_mx);
             _cv.wait(lock, [this] { return _done.load(memory_order_acquire) || !_tasks.empty(); });
             if (_done.load(memory_order_acquire) && _tasks.empty()) return;
-            task = std::move(_tasks.front());
+            task = move(_tasks.front());
             _tasks.pop();
         }
         task();

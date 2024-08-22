@@ -35,41 +35,6 @@ enum class EventType
 };
 
 
-class Handle
-{
-private:
-    int _fd;
-
-public:
-    Handle(int fd) : _fd(fd) {}
-    int getFd() { return _fd; }
-};
-
-class EventHandler
-{
-protected:
-    int _handle;
-    function<void()> _callback;
-    
-    
-
-public:
-    EventHandler(int fd, function<void()> callback) : _handle(fd), _callback(callback) {}
-    virtual ~EventHandler() = default;
-    virtual void handleEvent() = 0;
-    virtual int getHandle() = 0;
-};
-
-class ConcreteEventHandler : public EventHandler
-{
-    public:
-    ConcreteEventHandler(int fd, function<void()> callback) : EventHandler(fd, callback) {}
-    void handleEvent() override { _callback(); }
-    int getHandle() override { return _handle; }
-    
-};
-
-
 class Reactor
 {
 private:

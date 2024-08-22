@@ -3,7 +3,7 @@
 void Tree::init(vector<Edge> edges)
 {
     V = edges.size() + 1;
-    cout << "V: " << V << endl;
+
     E = 0;
     adj.resize(V);
     
@@ -12,7 +12,6 @@ void Tree::init(vector<Edge> edges)
         addEdge(e.src, e.dest, e.weight);
     }
 
-    cout << "Tree initialized with " << V << " vertices and " << E << " edges" << endl;
 }
 
 int Tree::totalWeight()

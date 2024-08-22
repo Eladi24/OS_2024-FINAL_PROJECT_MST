@@ -43,18 +43,22 @@ $(LIB_TARGET): $(LIB_OBJ)
 
 # Valgrind Pipeline Server
 pipeline_valgrind: PipelineServer
+	clear
 	$(Valgrind_FLAGS) ./PipelineServer
 
 # Helgrind Pipeline Server
 pipeline_helgrind: PipelineServer
+	clear
 	$(Helgrind_FLAGS) ./PipelineServer
 
 # Valgrind LF Server
 lf_valgrind: LFServer
+	clear
 	$(Valgrind_FLAGS) ./LFServer
 
 # Helgrind LF Server
 lf_helgrind: LFServer
+	clear
 	$(Helgrind_FLAGS) ./LFServer
 
 # Rebuild
