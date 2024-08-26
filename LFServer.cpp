@@ -5,7 +5,6 @@
 #include <sys/types.h>
 #include <csignal>
 #include <cstring>
-
 #include "Graph.hpp"
 #include "Tree.hpp"
 #include "MSTFactory.hpp"
@@ -14,13 +13,16 @@
 
 const int port = 4050;
 function<void(int)> signalHandlerLambda;
-int clientNumber = 0;
+atomic<int> clientNumber(0);
 mutex graphMutex;
-mutex clientNumMutex;
+mutex& coutLock = LFThreadPool::getOutputMx();
 
 void signalHandler(int signum)
 {
-    cout << "Interrupt signal (" << signum << ") received.\n";
+    {
+        unique_lock<mutex> guard(coutLock);
+        cout << "Interrupt signal (" << signum << ") received." << endl;
+    }
     // Free memory
     signalHandlerLambda(signum);
     exit(signum);
@@ -43,9 +45,6 @@ int scanGraph(int clientSock, int &n, int &m, stringstream &ss, unique_ptr<Graph
     }
 
     g = make_unique<Graph>(n, m);
-    cout << n << " " << m << endl;
-    this_thread::sleep_for(chrono::milliseconds(1));
-
     return 0;
 }
 
@@ -62,22 +61,21 @@ int scanSrcDest(stringstream &ss, int &src, int &dest)
 
 void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, unique_ptr<Tree> &mst)
 {
-    cout << "Client socket in handleCommands: " << clientSock << endl;
+    
     char buffer[1024];
     int bytesReceived;
-    cout << "Trying to read command" << endl;
-
     while (true)
     {
         bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
         if (bytesReceived <= 0)
         {
-            unique_lock<mutex> guard(clientNumMutex);
-            clientNumber--;
-            guard.unlock();
+            clientNumber.store(clientNumber.load(memory_order_acquire) - 1, memory_order_release);
             if (bytesReceived == 0)
             {
-                cout << "Connection closed" << endl;
+                {
+                    unique_lock<mutex> guard(coutLock);
+                    cout << "Connection closed by client." << endl;
+                }
                 break;
             }
             else
@@ -119,40 +117,66 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
             scanGraph(clientSock, n, m, ss, g);
             
             // Wait for the graph to be created
-            for (int i = 0; i < m; i++)
+           for (int i = 0; i < m; i++)
             {
-                int u, v, w;
+                int u = 0, v = 0, w = 0;
+
+                // Attempt to read and parse the edge data
+                //unique_lock<mutex> guard(ssLock);
                 if (!(ss >> u >> v >> w))
                 {
-                    if (u < 0 || u > n || v < 0 || v > n || w < 0)
-                    {
-                        sendResponse(clientSock, "Invalid edge\n");
-                        continue;
-                    }
+
+                    // Clear the stringstream and read new input from the socket
+                    ss.clear();
+                    ss.str("");
+                    // guard.unlock();
+                    // guard.release();
                     memset(buffer, 0, sizeof(buffer));
                     bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
+
+                    // Check if we received valid data
                     if (bytesReceived <= 0)
                     {
-                        unique_lock<mutex> guard(clientNumMutex);
-                        clientNumber--;
-                        guard.unlock();
+                        // Decrement the client number as we're losing a client
+                        clientNumber.store(clientNumber.load(memory_order_acquire) - 1, memory_order_release);
                         if (bytesReceived == 0)
                         {
-                            cout << "Connection closed" << endl;
+                            unique_lock<mutex> guard(coutLock);
+                            cout << "Connection closed by client." << endl;
                             break;
                         }
                         else
                         {
-                            cerr << "recv error" << endl;
+
+                            cerr << "recv error: " << strerror(errno) << endl;
+                            break;
                         }
                     }
-                    ss.clear();
-                    ss.str(buffer);
-                    ss >> u >> v >> w;
-                    // Add the event to the pool
-                    g->addEdge(u, v, w);
-                    
+
+                    // Load the new input into the stringstream
+                    {
+                        //unique_lock<mutex> guard(ssLock);
+                        ss.write(buffer, bytesReceived);
+
+                        // Attempt to parse again with the new data
+                        if (!(ss >> u >> v >> w))
+                        {
+                            sendResponse(clientSock, "Invalid input format. Please enter 3 integers for u, v, and w.\n");
+                            i--; // Retry this iteration since we didn't get valid input
+                            continue;
+                        }
+                    }
                 }
+
+                // Validate the edge values (u, v, w)
+                if (u < 0 || u > n || v < 0 || v > n || w < 0)
+                {
+                    sendResponse(clientSock, "Invalid edge values. Vertices should be in the range [1, n] and weight should be non-negative.\n");
+                    i--; // Retry this iteration since the input was invalid
+                    continue;
+                }
+
+                g->addEdge(u, v, w);
             }
             response = "Graph created with " + to_string(n) + " vertices and " + to_string(m) + " edges.\n";
         }
@@ -294,12 +318,8 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
         else if (cmd == "Exit")
         {
             sendResponse(clientSock, "Goodbye\n");
-            cout << "Thread number " << this_thread::get_id() << " exiting" << endl;
-            // Close the client socket
-            close(clientSock);
-            unique_lock<mutex> guard(clientNumMutex);
-            clientNumber--;
-            guard.unlock();
+            cout << "Thread number " << this_thread::get_id() << " exiting" << endl;        
+            clientNumber.store(clientNumber.load(memory_order_acquire) - 1, memory_order_release);
             break;
         }
         else
@@ -310,6 +330,7 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
         sendResponse(clientSock, response);
         
     }
+    close(clientSock);
 }
 
 void acceptConnection(int server_sock, unique_ptr<Graph> &g, MSTFactory &factory, unique_ptr<Tree> &mst, LFThreadPool &pool)
@@ -323,14 +344,15 @@ void acceptConnection(int server_sock, unique_ptr<Graph> &g, MSTFactory &factory
         perror("accept");
         return;
     }
-    unique_lock<mutex> guard(clientNumMutex);
-    clientNumber++;
-    guard.unlock();
+    clientNumber.store(clientNumber.load(memory_order_acquire) + 1, memory_order_release);
     char s[INET6_ADDRSTRLEN];
     inet_ntop(client_addr.sin_family, &client_addr.sin_addr, s, sizeof s);
-    cout << "New connection from " << s << " on socket " << client_sock << endl;
-    cout << "Currently " << clientNumber << " clients connected" << endl;
-    cout << "Server socket: " << server_sock << " Client socket: " << client_sock << endl;
+    {
+        unique_lock<mutex> guard(coutLock);
+        cout << "New connection from " << s << " on socket " << client_sock << endl;
+        cout << "Currently " << clientNumber << " clients connected" << endl;
+        cout << "Server socket: " << server_sock << " Client socket: " << client_sock << endl;
+    }
     // Create new event handler for handling the commands and add it to the reactor
     function<void()> commandHandler = [&client_sock, &g, &factory, &mst]()
     {
@@ -344,22 +366,25 @@ int main()
 {
     signal(SIGINT, signalHandler);
     shared_ptr<Reactor> reactor = make_shared<Reactor>();
-
     unique_ptr<Graph> g;
     unique_ptr<Tree> t;
     MSTFactory factory;
     unique_ptr<LFThreadPool> pool;
     // The server socket
     int serverSock;
+    
     signalHandlerLambda = [&](int signum)
     {
-        cout << "Freeing memory" << endl;
+        {
+            unique_lock<mutex> guard(coutLock);
+            cout << "Freeing memory" << endl;
+        }
         close(serverSock);
-        g.reset();
-        t.reset();
         reactor.reset();
         pool.reset();
-        
+        factory.destroyStrategy();
+        g.reset();
+        t.reset();
     };
     
     struct sockaddr_in serverAddr;
@@ -400,15 +425,21 @@ int main()
         exit(1);
     }
 
-    cout << "MST LF server waiting for requests on port " << port << endl;
-    cout << "Server socket: " << serverSock << endl;
+    {
+        unique_lock<mutex> guard(coutLock);
+        cout << "MST LF server waiting for requests on port " << port << endl;
+        cout << "Server socket: " << serverSock << endl;
+    }
 
     // Add the acceptConnection function to the reactor as a lambda function
     pool = make_unique<LFThreadPool>(10, reactor);
     reactor->addHandle(serverSock, [serverSock, &g, &factory, &t, &pool]()
                        { acceptConnection(serverSock, g, factory, t, *pool); });
     // Allow the threads in the pool to run without the finishing the server
-    cout << "Server running on thread: " << this_thread::get_id() << endl;
+    {
+        unique_lock<mutex> guard(coutLock);
+        cout << "Server running on thread: " << this_thread::get_id() << endl;
+    }
     while (true)
     {
         this_thread::sleep_for(chrono::milliseconds(1));
