@@ -86,34 +86,28 @@ int scanSrcDest(stringstream &ss, atomic<int> &src, atomic<int> &dest)
     return 0;
 }
 
-void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, unique_ptr<Graph> &g, MSTFactory &factory, unique_ptr<Tree> &mst)
-{
+void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, unique_ptr<Graph> &g, MSTFactory &factory, unique_ptr<Tree> &mst) {
     condition_variable cv;
     mutex ssLock;
     atomic<bool> done(false);
     char buffer[1024] = {0};
-    while (!terminateFlag.load())
-    {
+
+    while (!terminateFlag.load()) {
         memset(buffer, 0, sizeof(buffer));
         int bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
-        if (bytesReceived <= 0)
-        {
+        if (bytesReceived <= 0) {
             clientNumber.store(clientNumber.load(memory_order_acquire) - 1, memory_order_release);
-            if (bytesReceived == 0)
-            {
+            if (bytesReceived == 0) {
                 unique_lock<mutex> guard(coutLock);
                 cout << "Connection closed" << endl;
                 break;
-            }
-            else
-            {
+            } else {
                 cerr << "recv error" << endl;
             }
         }
         buffer[bytesReceived] = '\0';
         string command(buffer);
-        if (command.empty())
-            continue;
+        if (command.empty()) continue;
 
         stringstream ss(command);
         string cmd;
@@ -124,89 +118,63 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
 
         string future;
 
-        if (cmd == "Newgraph")
-        {
-            unique_lock<mutex> guard(graphLock, try_to_lock);
-            if (!guard.owns_lock())
-            {
-                sendResponse(clientSock, "Graph is being used by another thread can't create a new graph.\n");
-                continue;
-            }
-
-            if (g != nullptr)
-            {
+        if (cmd == "Newgraph") {
+            unique_lock<mutex> graphGuard(graphLock); // Lock for graph operations
+            if (g != nullptr) {
                 g.reset();
                 g = nullptr;
             }
-            if (mst != nullptr)
-            {
-
+            if (mst != nullptr) {
                 mst.reset();
                 mst = nullptr;
             }
+
             int n, m;
             mutex initLock;
             atomic<bool> initDone(false);
             condition_variable initCV;
-            pipeline[0]->enqueue([&ss, &n, &m, &g, &ssLock, &initLock, &initDone, &initCV]()
-                                 {  
-                                    unique_lock<mutex> guard2(ssLock);
-                                    unique_lock<mutex> guard(initLock);
-                                    scanGraph(n, m, ss, g);
-                                    initDone.store(true, memory_order_release);
-                                    initCV.notify_one(); });
+
+            pipeline[0]->enqueue([&ss, &n, &m, &g, &ssLock, &initLock, &initDone, &initCV]() {
+                unique_lock<mutex> guard2(ssLock);
+                unique_lock<mutex> guard(initLock);
+                scanGraph(n, m, ss, g);
+                initDone.store(true, memory_order_release);
+                initCV.notify_one();
+            });
 
             // Wait for the graph to be created
-            while (!initDone)
             {
                 unique_lock<mutex> guard(initLock);
-                initCV.wait(guard);
+                while (!initDone) {
+                    initCV.wait(guard);
+                }
             }
 
-            for (int i = 0; i < m; i++)
-            {
+            for (int i = 0; i < m; i++) {
                 int u = 0, v = 0, w = 0;
 
-                // Attempt to read and parse the edge data
-                unique_lock<mutex> guard(ssLock);
-                if (!(ss >> u >> v >> w))
                 {
+                    unique_lock<mutex> guard(ssLock);
+                    if (!(ss >> u >> v >> w)) {
+                        ss.clear();
+                        ss.str("");
+                        memset(buffer, 0, sizeof(buffer));
+                        bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
 
-                    // Clear the stringstream and read new input from the socket
-                    ss.clear();
-                    ss.str("");
-                    guard.unlock();
-                    guard.release();
-                    memset(buffer, 0, sizeof(buffer));
-                    bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
-
-                    // Check if we received valid data
-                    if (bytesReceived <= 0)
-                    {
-                        // Decrement the client number as we're losing a client
-                        clientNumber.store(clientNumber.load(memory_order_acquire) - 1, memory_order_release);
-                        if (bytesReceived == 0)
-                        {
-                            unique_lock<mutex> guard(coutLock);
-                            cout << "Connection closed by client." << endl;
-                            break;
+                        if (bytesReceived <= 0) {
+                            clientNumber.store(clientNumber.load(memory_order_acquire) - 1, memory_order_release);
+                            if (bytesReceived == 0) {
+                                unique_lock<mutex> coutGuard(coutLock);
+                                cout << "Connection closed by client." << endl;
+                                break;
+                            } else {
+                                cerr << "recv error: " << strerror(errno) << endl;
+                                break;
+                            }
                         }
-                        else
-                        {
 
-                            cerr << "recv error: " << strerror(errno) << endl;
-                            break;
-                        }
-                    }
-
-                    // Load the new input into the stringstream
-                    {
-                        unique_lock<mutex> guard(ssLock);
                         ss.write(buffer, bytesReceived);
-
-                        // Attempt to parse again with the new data
-                        if (!(ss >> u >> v >> w))
-                        {
+                        if (!(ss >> u >> v >> w)) {
                             sendResponse(clientSock, "Invalid input format. Please enter 3 integers for u, v, and w.\n");
                             i--; // Retry this iteration since we didn't get valid input
                             continue;
@@ -214,232 +182,209 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
                     }
                 }
 
-                // Validate the edge values (u, v, w)
-                if (u < 0 || u > n || v < 0 || v > n || w < 0)
-                {
+                if (u < 0 || u > n || v < 0 || v > n || w < 0) {
                     sendResponse(clientSock, "Invalid edge values. Vertices should be in the range [1, n] and weight should be non-negative.\n");
                     i--; // Retry this iteration since the input was invalid
                     continue;
                 }
 
-                // Add the edge to the graph via the pipeline
-                pipeline[0]->enqueue([&g, u, v, w]()
-                                     {  unique_lock<mutex> guard(graphLock);
-                                        g->addEdge(u, v, w); });
+                pipeline[0]->enqueue([&g, u, v, w]() {
+                    unique_lock<mutex> guard(graphLock);
+                    g->addEdge(u, v, w);
+                });
             }
 
             {
-                unique_lock<mutex> guard(futureLock);
+                unique_lock<mutex> futureGuard(futureLock);
                 future = "Graph created with " + to_string(n) + " vertices and " + to_string(m) + " edges.\n";
                 done.store(true, memory_order_release);
                 cv.notify_one();
             }
-        }
-
-        else if (cmd == "Prim")
-        {
-            unique_lock<mutex> guard(graphLock, try_to_lock);
-            if (!guard.owns_lock())
-            {
-
-                sendResponse(clientSock, "Graph is being used by another thread can't search for MST prim.\n");
-                continue;
-            }
-
-            if (g == nullptr || g->getAdj().empty())
-            {
+        } else if (cmd == "Prim") {
+            unique_lock<mutex> graphGuard(graphLock); // Lock for MST operations
+            if (g == nullptr || g->getAdj().empty()) {
                 sendResponse(clientSock, "Graph not initialized\n");
                 continue;
             }
 
-            if (mst != nullptr)
-            {
+            if (mst != nullptr) {
                 mst.reset();
                 mst = nullptr;
             }
 
-            pipeline[1]->enqueue([&g, &factory, &mst]()
-                                 {  
-                                    factory.setStrategy(new PrimStrategy());
-                                    mst = factory.createMST(g); });
+            pipeline[1]->enqueue([&g, &factory, &mst]() {
+                unique_lock<mutex> guard(graphLock);
+                factory.setStrategy(new PrimStrategy());
+                mst = factory.createMST(g);
+            });
+
             {
-                unique_lock<mutex> guard(futureLock);
+                unique_lock<mutex> futureGuard(futureLock);
                 future = "MST created using Prim's algorithm.\n";
             }
 
-            pipeline[1]->enqueue([&mst, &future, &cv, &done]()
-                                 {  unique_lock<mutex> guard(futureLock);
-                                    future += mst->printMST();
-                                    done.store(true, memory_order_release);
-                                    cv.notify_one(); });
-            
-        }
-        else if (cmd == "Kruskal")
-        {
-            unique_lock<mutex> guard(graphLock, try_to_lock);
-            if (!guard.owns_lock())
-            {
-
-                sendResponse(clientSock, "Graph is being used by another thread can't search for MST Kruskal.\n");
-                continue;
-            }
-            if (g == nullptr || g->getAdj().empty())
-            {
+            pipeline[1]->enqueue([&mst, &future, &cv, &done]() {
+                unique_lock<mutex> guard(graphLock);
+                unique_lock<mutex> futureGuard(futureLock);
+                future += mst->printMST();
+                done.store(true, memory_order_release);
+                cv.notify_one();
+            });
+        } else if (cmd == "Kruskal") {
+            unique_lock<mutex> graphGuard(graphLock); // Lock for MST operations
+            if (g == nullptr || g->getAdj().empty()) {
                 sendResponse(clientSock, "Graph not initialized\n");
                 continue;
             }
-            if (mst != nullptr)
-            {
 
+            if (mst != nullptr) {
                 mst.reset();
                 mst = nullptr;
             }
 
-            // Add to the queue the function to create the MST
-            pipeline[2]->enqueue([&g, &factory, &mst]()
-                                 {  
-                                    factory.setStrategy(new KruskalStrategy());
-                                    mst = factory.createMST(g); });
+            pipeline[2]->enqueue([&g, &factory, &mst]() {
+                unique_lock<mutex> guard(graphLock);
+                factory.setStrategy(new KruskalStrategy());
+                mst = factory.createMST(g);
+            });
+
             {
-                unique_lock<mutex> guard(futureLock);
+                unique_lock<mutex> futureGuard(futureLock);
                 future = "MST created using Kruskal's algorithm.\n";
             }
-            // Add to the queue the function to print the MST
-            pipeline[2]->enqueue([&mst, &future, &cv, &done]()
-                                 { unique_lock<mutex> guard(futureLock);
-                                    future += mst->printMST();
-                                    done.store(true, memory_order_release);
-                                    cv.notify_one(); });
-            
-        }
 
-        else if (cmd == "MSTweight")
-        {
-
-            if (mst == nullptr)
-            {
+            pipeline[2]->enqueue([&mst, &future, &cv, &done]() {
+                unique_lock<mutex> guard(graphLock);
+                unique_lock<mutex> futureGuard(futureLock);
+                future += mst->printMST();
+                done.store(true, memory_order_release);
+                cv.notify_one();
+            });
+        } else if (cmd == "MSTweight") {
+            unique_lock<mutex> graphGuard(graphLock); // Lock for MST operations
+            if (mst == nullptr) {
                 sendResponse(clientSock, "MST not created\n");
                 continue;
             }
 
             {
-                unique_lock<mutex> guard(futureLock);
+                unique_lock<mutex> futureGuard(futureLock);
                 future = "Total weight of the MST is: ";
             }
 
-            // Add to the queue the function to compute the total weight of the MST
-            pipeline[3]->enqueue([&mst, &future, &cv, &done]()
-                                 {  unique_lock<mutex> guard(futureLock);
-                                    future += to_string(mst->totalWeight()) + "\n";
-                                    done.store(true, memory_order_release); 
-                                    cv.notify_one(); });
-            
-        }
-
-        else if (cmd == "Shortestpath")
-        {
-
-            if (mst == nullptr)
-            {
+            pipeline[3]->enqueue([&mst, &future, &cv, &done]() {
+                unique_lock<mutex> guard(graphLock);
+                unique_lock<mutex> futureGuard(futureLock);
+                future += to_string(mst->totalWeight()) + "\n";
+                done.store(true, memory_order_release);
+                cv.notify_one();
+            });
+        } else if (cmd == "Shortestpath") {
+            unique_lock<mutex> graphGuard(graphLock); // Lock for MST operations
+            if (mst == nullptr) {
                 sendResponse(clientSock, "MST not created\n");
                 continue;
             }
 
-            atomic<int> src, dest;
-            atomic<int> res;
-            pipeline[4]->enqueue([&ss, &src, &dest, &res]()
-                                 { res.store(scanSrcDest(ss, src, dest), memory_order_release); });
-            
+            atomic<int> src{-1}, dest{-1};
+            atomic<int> res{0};
 
-            if (res.load(memory_order_acquire) == -1)
-                continue;
+            std::mutex resMutex;
+            std::condition_variable resCv;
+            bool ready = false;
+
+            pipeline[4]->enqueue([&ss, &src, &dest, &res, &resMutex, &resCv, &ready]() {
+                res.store(scanSrcDest(ss, src, dest), memory_order_release);
+                std::lock_guard<std::mutex> lock(resMutex);
+                ready = true;
+                resCv.notify_one();
+            });
+
             {
-                unique_lock<mutex> guard(futureLock);
-                future = "Shortest path from " + to_string(src) + " to " + to_string(dest) + " is: ";
+                std::unique_lock<std::mutex> lock(resMutex);
+                resCv.wait(lock, [&ready]() { return ready; });
             }
-            // Add to the queue the function to find the shortest path
-            pipeline[4]->enqueue([&mst, &src, &dest, &future, &cv, &done]()
-                                 {  unique_lock<mutex> guard(futureLock);
-                                    future += mst->shortestPath(src, dest);
-                                    done.store(true, memory_order_release);
-                                    cv.notify_one(); });
-            
-        }
-        else if (cmd == "Longestpath")
-        {
 
-            if (mst == nullptr)
-            {
-                sendResponse(clientSock, "MST not created\n");
+            if (res.load(memory_order_acquire) == -1) {
+                sendResponse(clientSock, "Invalid source or destination\n");
                 continue;
             }
 
-            atomic<int> src, dest;
-            atomic<int> res;
-            pipeline[5]->enqueue([&ss, &src, &dest, &res]()
-                                 { res.store(scanSrcDest(ss, src, dest), memory_order_release); });
-            if (res == -1)
-                continue;
             {
-                unique_lock<mutex> guard(futureLock);
-                future = "Longest path from " + to_string(src) + " to " + to_string(dest) + " is: ";
+                unique_lock<mutex> futureGuard(futureLock);
+                future = "Shortest path from " + to_string(src.load()) + " to " + to_string(dest.load()) + " is: ";
             }
-            // Add to the queue the function to find the longest path
-            pipeline[5]->enqueue([&mst, &src, &dest, &future, &cv, &done]()
-                                 {  unique_lock<mutex> guard(futureLock);
-                                    future += mst->longestPath(src, dest);
-                                    done.store(true, memory_order_release);
-                                    cv.notify_one(); });
-            
-        }
-        else if (cmd == "Averdist")
-        {
 
-            if (mst == nullptr)
-            {
+            pipeline[4]->enqueue([&mst, &src, &dest, &future, &cv, &done]() {
+                unique_lock<mutex> guard(graphLock);
+                string shortestPathResult = mst->shortestPath(src.load(), dest.load());
+
+                unique_lock<mutex> futureGuard(futureLock);
+                future += shortestPathResult;
+                done.store(true, memory_order_release);
+                cv.notify_one();
+            });
+        } else if (cmd == "Longestpath") {
+            unique_lock<mutex> graphGuard(graphLock); // Lock for MST operations
+            if (mst == nullptr) {
                 sendResponse(clientSock, "MST not created\n");
                 continue;
             }
 
             {
-                unique_lock<mutex> guard(futureLock);
-                future = "Average distance of the MST is: ";
+                unique_lock<mutex> futureGuard(futureLock);
+                future = "The longest path (diameter) of the MST is: ";
             }
-            // Add to the queue the function to compute the average distance
-            pipeline[6]->enqueue([&mst, &future, &cv, &done]()
-                                 {  unique_lock<mutex> guard(futureLock);
-                                    future += to_string(mst->averageDistanceEdges()) + "\n";
-                                    done.store(true, memory_order_release);
-                                    cv.notify_one(); });
 
-            
-        }
-        else if (cmd == "Exit")
-        {
+            pipeline[5]->enqueue([&mst, &future, &cv, &done]() {
+                unique_lock<mutex> guard(graphLock);
+                int diameter = mst->diameter();
+                unique_lock<mutex> futureGuard(futureLock);
+                future += to_string(diameter) + "\n";
+                done.store(true, memory_order_release);
+                cv.notify_one();
+            });
+        } else if (cmd == "Averdist") {
+            unique_lock<mutex> graphGuard(graphLock); // Lock for MST operations
+            if (mst == nullptr) {
+                sendResponse(clientSock, "MST not created\n");
+                continue;
+            }
+
+            pipeline[6]->enqueue([&mst, &future, &cv, &done]() {
+                unique_lock<mutex> guard(graphLock);
+                unique_lock<mutex> futureGuard(futureLock);
+                future += to_string(mst->averageDistanceEdges()) + "\n";
+                done.store(true, memory_order_release);
+                cv.notify_one();
+            });
+        } else if (cmd == "Exit") {
             sendResponse(clientSock, "Goodbye\n");
             clientNumber.store(clientNumber.load(memory_order_acquire) - 1, memory_order_release);
             break;
-        }
-        else
-        {
-            sendResponse(clientSock, "Invalid command" + cmd + "\n");
+        } else {
+            sendResponse(clientSock, "Invalid command: " + cmd + "\n");
             continue;
         }
-        unique_lock<mutex> guard(futureLock);
-        while (!done)
+
         {
-            cv.wait(guard);
+            unique_lock<mutex> guard(futureLock);
+            while (!done) {
+                cv.wait(guard);
+            }
+            sendResponse(clientSock, future);
+            done.store(false, memory_order_release);
+            future.clear();
         }
-        sendResponse(clientSock, future);
-        done.store(false, memory_order_release);
-        future.clear();
     }
+
     close(clientSock);
     {
         unique_lock<mutex> guard(coutLock);
         cout << "Thread number " << this_thread::get_id() << " exiting" << endl;
     }
 }
+
 
 int acceptConnection(int server_sock)
 {
