@@ -1,9 +1,16 @@
 #include "Tree.hpp"
+#include <queue>
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <climits>
+#include <iostream>
+
+using namespace std;
 
 void Tree::init(vector<Edge> edges)
 {
     V = edges.size() + 1;
-
     E = 0;
     adj.resize(V);
     
@@ -11,7 +18,6 @@ void Tree::init(vector<Edge> edges)
     {
         addEdge(e.src, e.dest, e.weight);
     }
-
 }
 
 int Tree::totalWeight()
@@ -76,8 +82,25 @@ void Tree::dfs(int node, int parent, vector<int> &dist, vector<int> &parentTrack
     }
 }
 
+string Tree::shortestPath(int u, int v)
+{
+    if (u == v)
+    {
+        return to_string(u) + " -> " + to_string(v) + " (0)\n";  // Trivial path to self
+    }
 
-string Tree::reconstructPath(int src, int dest, const vector<int> &parentTrack)
+    vector<int> parentTrack(V, -1);
+    vector<int> dist = dijkstra(u, parentTrack);
+
+    if (dist[v - 1] == INT_MAX)
+    {
+        return "No path\n";  // No path exists
+    }
+
+    return reconstructPath(u, v, parentTrack, dist[v - 1]);  // Pass distance to include in the output
+}
+
+string Tree::reconstructPath(int src, int dest, const vector<int> &parentTrack, int totalWeight)
 {
     int dest_index = dest - 1; // Convert to 0-based index
     if (parentTrack[dest_index] == -1)
@@ -108,7 +131,8 @@ string Tree::reconstructPath(int src, int dest, const vector<int> &parentTrack)
             result += " -> ";
         }
     }
-    return result + "\n";
+    result += " (" + to_string(totalWeight) + ")\n";  // Include the total weight
+    return result;
 }
 
 
@@ -160,29 +184,43 @@ float Tree::averageDistanceEdges()
     return static_cast<float>(total) / count;
 }
 
-string Tree::shortestPath(int u, int v)
+
+pair<int, int> Tree::farthestNode(int start)
 {
-    vector<int> parentTrack(V);
-    vector<int> dist = dijkstra(u, parentTrack);
-    return reconstructPath(u, v, parentTrack);
+    vector<int> dist(V, -1);
+    vector<int> parentTrack(V, -1);
+    dist[start - 1] = 0;
+
+    dfs(start, -1, dist, parentTrack);
+
+    int maxDist = -1;
+    int farthest = start;
+    for (int i = 0; i < V; ++i)
+    {
+        if (dist[i] > maxDist)
+        {
+            maxDist = dist[i];
+            farthest = i + 1;
+        }
+    }
+
+    return {farthest, maxDist};
 }
 
-string Tree::longestPath(int u, int v)
+int Tree::diameter()
 {
-    // Distance vector to store the distance of each node from the source node
-    vector<int> dist(V, INT_MAX);
-    // Parent vector to store the parent of each node in the path
-    vector<int> parentTrack(V, -1);
-    // Distance of the source node from itself is 0
-    dist[u - 1] = 0;
-    // Run DFS from the source node
-    dfs(u, -1, dist, parentTrack);
-    return reconstructPath(u, v, parentTrack);
+    // Step 1: Find the farthest node from an arbitrary starting node (e.g., node 1)
+    auto [farthestNodeFromStart, _] = farthestNode(1);
+
+    // Step 2: Find the farthest node from the first farthest node found
+    auto [farthestNodeFromFarthest, diameterLength] = farthestNode(farthestNodeFromStart);
+
+    return diameterLength;
 }
 
 void Tree::addEdge(int u, int v, int w)
 {
-    if (u < 0 || u > V || v < 0 || v > V)
+    if (u < 1 || u > V || v < 1 || v > V)
     {
         cerr << "Invalid edge, vertices must be between 1 and " << V << endl;
         exit(1);
