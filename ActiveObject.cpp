@@ -3,10 +3,10 @@
 mutex ActiveObject::_outputMx;
 ActiveObject::~ActiveObject()
 {
-    {
-        lock_guard<mutex> lock(_outputMx);
-        cout << "ActiveObject destructor" << endl;
-    }
+    // {
+    //     lock_guard<mutex> lock(_outputMx);
+    //     cout << "ActiveObject destructor" << endl;
+    // }
     // Let the worker thread know that it should stop
     _done.store(true, memory_order_release);
     // Wake up the worker thread
@@ -27,10 +27,7 @@ void ActiveObject::start()
 
 void ActiveObject::run()
 {   
-    {
-        lock_guard<mutex> outLock(_outputMx);
-        cout << "Worker thread id: " << _worker.get_id() << endl;
-    }
+  
     while (true)
     {
         function<void()> task;
@@ -42,9 +39,6 @@ void ActiveObject::run()
             _tasks.pop();
         }
         task();
-        {
-            lock_guard<mutex> outLock(_outputMx);
-            cout << "Worker thread id: " << _worker.get_id() << " Finished task" << endl;
-        }
+    
     }
 }

@@ -254,22 +254,40 @@ string Tree::printMST()
     return printMST(0, -1, 0, visited) + "\n";
 }
 
-string Tree::printMST(int node, int parent, int level, vector<bool> &visited)
+string Tree::printMST(int node, int parent, int level, vector<bool>& visited)
 {
     string result;
+    if (level == 0) {
+        result += "------------------\n";
+    }
+    
     visited[node] = true;
 
     for (auto& edge : adj[node])
     {
         if (!visited[edge.dest - 1])
         {
-            for (int i = 0; i < level; i++)
-            {
-                result += "  ";
-            }
-            result += to_string(node + 1) + " - " + to_string(edge.dest) + " (" + to_string(edge.weight) + ")\n";
+            // Use indentation to visually represent tree levels
+            string indentation(level * 4, ' '); // Use 4 spaces per level for clarity
+
+            // Format the output with clearer connection symbols and descriptions
+            result += indentation + "|- Node " + to_string(node + 1) + " -> Node " + to_string(edge.dest) + " [weight: " + to_string(edge.weight) + "]\n";
+            
+            // Add an extra blank line for more spacing between connections
+            result += "\n";
+            
+            // Recursively print the subtree with incremented level
             result += printMST(edge.dest - 1, node, level + 1, visited);
         }
     }
+
+    if (level == 0) {
+        result += "--------------------\n";
+    }
+
     return result;
 }
+
+
+
+

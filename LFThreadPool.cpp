@@ -11,10 +11,10 @@ LFThreadPool::LFThreadPool(size_t numThreads, Reactor& reactor)
         _followers[i] = make_shared<ThreadContext>();
         // Create a new thread and bind the follower loop function
         _followers[i]->createThread(bind(&LFThreadPool::followerLoop, this, i));
-        {
-            unique_lock<mutex> guard(_outputMx);
-            cout << "Following thread created: " << _followers[i]->getId() << endl;
-        }
+        // {
+        //     unique_lock<mutex> guard(_outputMx);
+        //     cout << "Following thread created: " << _followers[i]->getId() << endl;
+        // }
     }
     // Promote the initial leader
     promoteNewLeader();
@@ -22,10 +22,10 @@ LFThreadPool::LFThreadPool(size_t numThreads, Reactor& reactor)
 
 LFThreadPool::~LFThreadPool()
 {
-    {
-        unique_lock<mutex> guard(_outputMx);
-        cout << "LFThreadPool destructor" << endl;
-    }
+    // {
+    //     unique_lock<mutex> guard(_outputMx);
+    //     cout << "LFThreadPool destructor" << endl;
+    // }
     
     stopPool();
     // Clean the allocated resources
@@ -38,10 +38,10 @@ void LFThreadPool::promoteNewLeader()
     // If there is no leader, promote the first follower in the list
     if (_leader == nullptr)
     {
-        {
-            unique_lock<mutex> guard(_outputMx);
-            cout << "Promoting new leader: " << _followers.begin()->get()->getId() << endl;
-        }
+        // {
+        //     unique_lock<mutex> guard(_outputMx);
+        //     cout << "Promoting new leader: " << _followers.begin()->get()->getId() << endl;
+        // }
         _leader = *_followers.begin();
         // Wake up the new leader to handle events
         _leader->wakeUp();
@@ -53,10 +53,10 @@ void LFThreadPool::promoteNewLeader()
         // If the follower is not the current leader and is not awake, promote it
         if (*follower != *_leader && !follower->isAwake())
         {
-            {
-                unique_lock<mutex> guard(_outputMx);
-                cout << "Promoting new leader: " << follower->getId() << endl;
-            }
+            // {
+            //     unique_lock<mutex> guard(_outputMx);
+            //     cout << "Promoting new leader: " << follower->getId() << endl;
+            // }
             _leader = follower;
             // Wake up the new leader to handle events
             _leader->wakeUp();
@@ -72,10 +72,10 @@ void LFThreadPool::followerLoop(int id)
     {
         // Wait until the follower is promoted to be the leader or the thread pool is stopped
         _followers[id]->conditionWait(_stop);
-        {
-            unique_lock<mutex> guard(_outputMx);
-            cout << "Thread: " << _followers[id]->getId() << " woke up" << endl;
-        }
+        // {
+        //     unique_lock<mutex> guard(_outputMx);
+        //     cout << "Thread: " << _followers[id]->getId() << " woke up" << endl;
+        // }
         
         // If stop then the program is shutting down
         if (_stop.load(memory_order_acquire))
@@ -90,10 +90,10 @@ void LFThreadPool::followerLoop(int id)
 
         // Execute events in the thread context
         currThread->executeEvent();
-        {
-            unique_lock<mutex> guard(_outputMx);
-            cout << "Thread: " << currThread->getId() << " is returning to sleep" << endl;
-        }
+        // {
+        //     unique_lock<mutex> guard(_outputMx);
+        //     cout << "Thread: " << currThread->getId() << " is returning to sleep" << endl;
+        // }
         // Put the thread to sleep
         currThread->sleep();
     }
@@ -122,10 +122,10 @@ void LFThreadPool::join()
     for (auto & follower : _followers)
     {
         pthread_t id = follower->getId();
-        {
-            unique_lock<mutex> guard(_outputMx);
-            cout << "Joining thread: " << id << endl;
-        }
+        // {
+        //     unique_lock<mutex> guard(_outputMx);
+        //     cout << "Joining thread: " << id << endl;
+        // }
         // Cancel the thread and join it
         follower->cancel();
         follower->join();

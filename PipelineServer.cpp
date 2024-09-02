@@ -203,7 +203,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
 
             {
                 unique_lock<mutex> futureGuard(futureLock);
-                future = "Graph created with " + to_string(n) + " vertices and " + to_string(m) + " edges.\n";
+                future = "\nGraph created with " + to_string(n) + " vertices and " + to_string(m) + " edges.\n";
                 done.store(true, memory_order_release);
                 cv.notify_one();
             }
@@ -227,7 +227,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
 
             {
                 unique_lock<mutex> futureGuard(futureLock);
-                future = "MST created using Prim's algorithm.\n";
+                future = "\nMST created using Prim's algorithm.\n";
             }
 
             pipeline[1]->enqueue([&mst, &future, &cv, &done]() {
@@ -257,7 +257,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
 
             {
                 unique_lock<mutex> futureGuard(futureLock);
-                future = "MST created using Kruskal's algorithm.\n";
+                future = "\nMST created using Kruskal's algorithm.\n";
             }
 
             pipeline[2]->enqueue([&mst, &future, &cv, &done]() {
@@ -276,13 +276,13 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
 
             {
                 unique_lock<mutex> futureGuard(futureLock);
-                future = "Total weight of the MST is: ";
+                future = "TOTAL WEIGHT OF THE MST IS: ";
             }
 
             pipeline[3]->enqueue([&mst, &future, &cv, &done]() {
                 unique_lock<mutex> guard(graphLock);
                 unique_lock<mutex> futureGuard(futureLock);
-                future += to_string(mst->totalWeight()) + "\n";
+                future += to_string(mst->totalWeight()) + "\n\n";
                 done.store(true, memory_order_release);
                 cv.notify_one();
             });
@@ -319,7 +319,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
 
             {
                 unique_lock<mutex> futureGuard(futureLock);
-                future = "Shortest path from " + to_string(src.load()) + " to " + to_string(dest.load()) + " is: ";
+                future = "SHORTEST PATH FROM " + to_string(src.load()) + " TO " + to_string(dest.load()) + " IS: ";
             }
 
             pipeline[4]->enqueue([&mst, &src, &dest, &future, &cv, &done]() {
@@ -327,7 +327,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
                 string shortestPathResult = mst->shortestPath(src.load(), dest.load());
 
                 unique_lock<mutex> futureGuard(futureLock);
-                future += shortestPathResult;
+                future += shortestPathResult+ "\n\n";
                 done.store(true, memory_order_release);
                 cv.notify_one();
             });
@@ -340,14 +340,14 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
 
             {
                 unique_lock<mutex> futureGuard(futureLock);
-                future = "The longest path (diameter) of the MST is: ";
+                future = "THE LONGEST PATH (DIAMETER) OF THE MST IS: ";
             }
 
             pipeline[5]->enqueue([&mst, &future, &cv, &done]() {
                 unique_lock<mutex> guard(graphLock);
                 int diameter = mst->diameter();
                 unique_lock<mutex> futureGuard(futureLock);
-                future += to_string(diameter) + "\n";
+                future += to_string(diameter) + "\n\n";
                 done.store(true, memory_order_release);
                 cv.notify_one();
             });
@@ -361,7 +361,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
             pipeline[6]->enqueue([&mst, &future, &cv, &done]() {
                 unique_lock<mutex> guard(graphLock);
                 unique_lock<mutex> futureGuard(futureLock);
-                future += to_string(mst->averageDistanceEdges()) + "\n";
+                future += "AVEREGE DISTANCE: " +to_string(mst->averageDistanceEdges()) + "\n\n";
                 done.store(true, memory_order_release);
                 cv.notify_one();
             });
@@ -386,10 +386,10 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
     }
 
     close(clientSock);
-    {
-        unique_lock<mutex> guard(coutLock);
-        cout << "Thread number " << this_thread::get_id() << " exiting" << endl;
-    }
+    // {
+    //     unique_lock<mutex> guard(coutLock);
+    //     cout << "Thread number " << this_thread::get_id() << " exiting" << endl;
+    // }
 }
 
 
@@ -428,8 +428,8 @@ int main()
     unique_ptr<functArgs> faPtr;
     signalHandlerLambda = [&](int signum)
     {
-        cout << "Freeing memory" << endl;
-        cout << boolalpha << terminateFlag.load() << endl;
+        // cout << "Freeing memory" << endl;
+        // cout << boolalpha << terminateFlag.load() << endl;
         for (auto &thread : clientThreads)
         {
             pthread_cancel(thread);
@@ -443,7 +443,7 @@ int main()
         g.reset();
         for (auto &obj : pipeline)
         {
-            cout << "Object: " << &obj << endl;
+            //cout << "Object: " << &obj << endl;
             obj.reset();
         }
         pipeline.clear();
