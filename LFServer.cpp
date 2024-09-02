@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <csignal>
 #include <cstring>
+#include <thread>
 #include "Graph.hpp"
 #include "Tree.hpp"
 #include "MSTFactory.hpp"
