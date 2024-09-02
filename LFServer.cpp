@@ -240,6 +240,7 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
 
         else if (cmd == "MSTweight")
         {
+            unique_lock<mutex> mstGuard(graphMutex);
             if (mst == nullptr)
             {
                 sendResponse(clientSock, "MST not created\n");
@@ -252,6 +253,7 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
 
         else if (cmd == "Shortestpath")
         {
+            unique_lock<mutex> mstGuard(graphMutex);
             if (mst == nullptr)
             {
                 sendResponse(clientSock, "MST not created\n");
@@ -269,6 +271,7 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
         }
         else if (cmd == "Longestpath")
         {
+            unique_lock<mutex> mstGuard(graphMutex);
             if (mst == nullptr)
             {
                 cerr << "MST not created" << endl;
@@ -280,6 +283,7 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
         }
         else if (cmd == "Averdist")
         {
+            unique_lock<mutex> mstGuard(graphMutex);
             if (mst == nullptr)
             {
                 sendResponse(clientSock, "MST not created\n");
