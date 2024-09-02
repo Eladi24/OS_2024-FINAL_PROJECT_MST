@@ -15,17 +15,22 @@ void Reactor::removeHandle(int fd)
 
 int Reactor::handleEvents()
 {
+    // Copy the master set to prevent modification during select
     fd_set readFds = _master;
+    // Wait for events on the registered file descriptors
     int nready = select(_maxFd + 1, &readFds, nullptr, nullptr, nullptr);
 
+    // If an error occurred in select
     if (nready == -1 && errno != EINTR)
     {
         cerr << "Error in select" << endl;
         return -1;
     }
 
+    // Check each file descriptor for events
     for (int fd = 0; fd <= _maxFd; ++fd)
     {
+        // If the file descriptor is ready to read, call the event handler
         if (FD_ISSET(fd, &readFds))
         {
             if (_handlers.find(fd) != _handlers.end())

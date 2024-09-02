@@ -7,15 +7,16 @@ LFThreadPool::LFThreadPool(size_t numThreads, Reactor& reactor)
     // Start the follower threads
     for (size_t i = 0; i < numThreads; ++i)
     {
-        
+        // Create a new thread context object
         _followers[i] = make_shared<ThreadContext>();
+        // Create a new thread and bind the follower loop function
         _followers[i]->createThread(bind(&LFThreadPool::followerLoop, this, i));
         {
             unique_lock<mutex> guard(_outputMx);
             cout << "Following thread created: " << _followers[i]->getId() << endl;
         }
     }
-    
+    // Promote the initial leader
     promoteNewLeader();
 }
 
@@ -27,12 +28,14 @@ LFThreadPool::~LFThreadPool()
     }
     
     stopPool();
+    // Clean the allocated resources
     _followers.clear();
     _leader.reset();
 }
 
 void LFThreadPool::promoteNewLeader()
 {
+    // If there is no leader, promote the first follower in the list
     if (_leader == nullptr)
     {
         {
@@ -40,12 +43,14 @@ void LFThreadPool::promoteNewLeader()
             cout << "Promoting new leader: " << _followers.begin()->get()->getId() << endl;
         }
         _leader = *_followers.begin();
+        // Wake up the new leader to handle events
         _leader->wakeUp();
         return;
     }
     
     for (auto &follower : _followers)
     {
+        // If the follower is not the current leader and is not awake, promote it
         if (*follower != *_leader && !follower->isAwake())
         {
             {
@@ -53,6 +58,7 @@ void LFThreadPool::promoteNewLeader()
                 cout << "Promoting new leader: " << follower->getId() << endl;
             }
             _leader = follower;
+            // Wake up the new leader to handle events
             _leader->wakeUp();
             return;
         }
@@ -64,7 +70,7 @@ void LFThreadPool::followerLoop(int id)
 {
     while (true)
     {
-        
+        // Wait until the follower is promoted to be the leader or the thread pool is stopped
         _followers[id]->conditionWait(_stop);
         {
             unique_lock<mutex> guard(_outputMx);
@@ -78,7 +84,7 @@ void LFThreadPool::followerLoop(int id)
         // Handle events in the reactor
         _reactor.handleEvents();
         
-        // Promote a new leader
+        // Promote a new leader and execute the event
         shared_ptr<ThreadContext> currThread = _leader;
         promoteNewLeader();
 
@@ -120,6 +126,7 @@ void LFThreadPool::join()
             unique_lock<mutex> guard(_outputMx);
             cout << "Joining thread: " << id << endl;
         }
+        // Cancel the thread and join it
         follower->cancel();
         follower->join();
         follower.reset();
