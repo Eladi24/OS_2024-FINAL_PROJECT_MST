@@ -28,62 +28,6 @@ using namespace std;
  * Servant: The component that actually executes the tasks (a.k.a. Worker thread)
  * Future: The result of the task execution (a.k.a. response to the client)
  */
-
-class ActiveObject
-{
-private:
-    queue<function<void()>> _tasks; // Task queue
-    mutex _mx; // Mutex to protect the task queue
-    condition_variable _cv; // Condition variable to wake up the worker thread
-    atomic<bool> _done; // Flag to signal the worker thread to stop
-    thread _worker; // Worker thread
-    static mutex _outputMx; // Mutex to protect the output stream
-
-    /**
-     * @brief 
-     * The worker thread function.
-     * This function is the main loop of the worker thread.
-     * It waits for tasks to be enqueued and executes them.
-     */
-    void run();
-
-public:
-    ActiveObject() : _tasks(), _done(false), _worker(&ActiveObject::run, this) {}
-
-    ~ActiveObject();
-
-    /**
-     * @brief
-     * Starts the worker thread.
-     */
-    void start();
-
-    /**
-     * @brief
-     * Enqueues a task to be executed by the worker thread.
-     * It is templated to allow for any type of function to be enqueued.
-     * 
-     * @param task The task to be enqueued
-     */
-    template <class F>
-    void enqueue(F task)
-    {
-        // Lock the mutex to protect the task queue
-        unique_lock<mutex> lock(_mx);
-        // Move the task into the task queue
-        _tasks.emplace(task);
-        // Wake up the worker thread
-        _cv.notify_one();
-    }
-
-    /**
-     * @brief
-     * Returns the mutex used to protect the output stream.
-     * 
-     * @return The mutex used to protect the output stream
-     */
-    static mutex& getOutputMutex() { return _outputMx; }
-};
 class ActiveObject
 {
 private:
