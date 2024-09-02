@@ -27,16 +27,6 @@
 
 using namespace std;
 
-enum class EventType
-{
-    READ,
-    WRITE,
-    ACCEPT,
-    CONNECT,
-    DISCONNECT
-};
-
-
 class Reactor
 {
 private:
@@ -58,9 +48,6 @@ public:
     void addHandle(int fd, function<void()> event);
     void removeHandle(int fd);
     int handleEvents();
-    int deactivateHandle(int fd, EventType type);
-    int reactivateHandle(int fd, EventType type);
-    
 };
 
 class ThreadContext
@@ -90,8 +77,8 @@ class ThreadContext
         int getClientFd() const { return _clientFd; }
         void conditionWait(const atomic<bool>& stopFlag);
         void notify() { unique_lock<mutex> lock(_thMx); _thCv.notify_one(); }
-        
-                
+        void join() { pthread_join(_thread, nullptr); }
+        void cancel() { pthread_cancel(_thread); }
         
 };
 

@@ -42,20 +42,6 @@ int Reactor::handleEvents()
     return 0;
 }
 
-int Reactor::deactivateHandle(int fd, EventType type)
-{
-
-    FD_CLR(fd, &_readFds);
-    return 0;
-}
-
-int Reactor::reactivateHandle(int fd, EventType type)
-{
-    FD_SET(fd, &_readFds);
-    _maxFd = max(_maxFd, fd);
-    return 0;
-}
-
 pthread_t  ThreadContext::createThread(function<void()> func)
 {
     // Allocate a new function on the heap so it can be passed to the thread
@@ -166,7 +152,7 @@ void LFThreadPool::followerLoop(int id)
         _followers[id]->conditionWait(_stop);
         {
             unique_lock<mutex> guard(_outputMx);
-            cout << "This thread: " << pthread_self() << " vs leader: " << _leader->getId() << endl;
+            cout << "Thread: " << _followers[id]->getId() << " woke up" << endl;
         }
         
         // If stop then the program is shutting down
@@ -176,7 +162,7 @@ void LFThreadPool::followerLoop(int id)
         // Handle events in the reactor
         _reactor.handleEvents();
         
-        // Promote a new leader without holding _mx lock
+        // Promote a new leader
         shared_ptr<ThreadContext> currThread = _leader;
         promoteNewLeader();
 
@@ -184,7 +170,7 @@ void LFThreadPool::followerLoop(int id)
         currThread->executeEvent();
         {
             unique_lock<mutex> guard(_outputMx);
-            cout << "Thread: " << currThread->getId() << " executed event" << endl;
+            cout << "Thread: " << currThread->getId() << " is returning to sleep" << endl;
         }
         // Put the thread to sleep
         currThread->sleep();
@@ -216,11 +202,10 @@ void LFThreadPool::join()
         pthread_t id = follower->getId();
         {
             unique_lock<mutex> guard(_outputMx);
-            cout << "Size of followers: " << _followers.size() << endl;
             cout << "Joining thread: " << id << endl;
         }
-        pthread_cancel(id);
-        pthread_join(id, nullptr);
+        follower->cancel();
+        follower->join();
         follower.reset();
     }
 }

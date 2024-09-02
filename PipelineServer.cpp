@@ -507,7 +507,6 @@ int main()
             continue;
         }
         // create pthread for each client
-        // functArgs fa = {newClientSock, ref(pipeline), ref(g), ref(factory), ref(mst)};
         faPtr = unique_ptr<functArgs>(new functArgs{newClientSock, ref(pipeline), ref(g), ref(factory), ref(mst)});
         pthread_t tid;
         auto threadFunc = [](void *arg) -> void *
