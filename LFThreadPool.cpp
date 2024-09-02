@@ -56,23 +56,10 @@ int Reactor::reactivateHandle(int fd, EventType type)
     return 0;
 }
 
-// ThreadContext& ThreadContext::operator=(ThreadContext&& other) noexcept
-// {
-//     if (this != &other)
-//     {
-//         _clientFd = other._clientFd;
-//         _event = move(other._event);
-//         _thread = move(other._thread);
-//     }
-
-//     return *this;
-// }
-
-void ThreadContext::createThread(function<void()> func)
+pthread_t  ThreadContext::createThread(function<void()> func)
 {
     // Allocate a new function on the heap so it can be passed to the thread
-    function<void()>* funcPtr = new function<void()>(func);
-
+    _functUniquePtr = make_unique<function<void()>>(func);
     // Create the thread
     int result = pthread_create(&_thread, nullptr, [](void* arg) -> void* {
         // Convert the argument back to function pointer
@@ -80,47 +67,51 @@ void ThreadContext::createThread(function<void()> func)
         
         // Execute the function
         (*funcPtr)();
-        
-        // Clean up the allocated memory
-        delete funcPtr;
-        
+          
         return nullptr;
-    }, funcPtr);
+    }, _functUniquePtr.get());
 
     // Check for thread creation errors
     if (result != 0) {
         throw runtime_error("Failed to create thread");
     }
 
+    return _thread;
 }
 
-ThreadContext::ThreadContext(function<void()> th) : _event(th), _isAwake(false)
+void ThreadContext::wakeUp()
 {
-    createThread(th);
+    unique_lock<mutex> lock(_thMx);
+    _isAwake.store(true, memory_order_release);
+    _thCv.notify_one();
 }
 
+void ThreadContext::sleep()
+{
+    unique_lock<mutex> lock(_thMx);
+    _isAwake.store(false, memory_order_release);
+}
+
+void ThreadContext::conditionWait(const atomic<bool>& stopFlag)
+{
+    unique_lock<mutex> lock(_thMx);
+    _thCv.wait(lock, [&stopFlag, this] { return _isAwake.load(memory_order_acquire) || stopFlag.load(memory_order_acquire); });
+}
 
 mutex LFThreadPool::_outputMx;
-LFThreadPool::LFThreadPool(size_t numThreads, shared_ptr<Reactor> reactor)
-    : _stop(false), _leaderChanged(false), _reactor(reactor)
+LFThreadPool::LFThreadPool(size_t numThreads, Reactor& reactor)
+    : _followers(numThreads), _stop(false), _leaderChanged(false), _reactor(reactor)
 {
     // Start the follower threads
     for (size_t i = 0; i < numThreads; ++i)
     {
-        pthread_t pid;
-        auto follwerWrapperFunc = [](void *arg) -> void *
+        
+        _followers[i] = make_shared<ThreadContext>();
+        _followers[i]->createThread(bind(&LFThreadPool::followerLoop, this, i));
         {
-            LFThreadPool *pool = static_cast<LFThreadPool *>(arg);
-            pool->followerLoop();
-            return nullptr;
-        };
-        pthread_create(&pid, nullptr, follwerWrapperFunc, this);
-        {
-            unique_lock<mutex> lock(_outputMx);
-            cout << "Following thread created: " << pid << endl;
+            unique_lock<mutex> guard(_outputMx);
+            cout << "Following thread created: " << _followers[i]->getId() << endl;
         }
-
-        _followers[pid] = make_shared<ThreadContext>(pid);
     }
     
     promoteNewLeader();
@@ -132,7 +123,7 @@ LFThreadPool::~LFThreadPool()
         unique_lock<mutex> guard(_outputMx);
         cout << "LFThreadPool destructor" << endl;
     }
-    _reactor.reset();
+    
     stopPool();
     _followers.clear();
     _leader.reset();
@@ -140,78 +131,53 @@ LFThreadPool::~LFThreadPool()
 
 void LFThreadPool::promoteNewLeader()
 {
-    unique_lock<mutex> lock(_mx);
     if (_leader == nullptr)
     {
         {
             unique_lock<mutex> guard(_outputMx);
-            cout << "Promoting new leader: " << _followers.begin()->first << endl;
+            cout << "Promoting new leader: " << _followers.begin()->get()->getId() << endl;
         }
-        _leader = _followers.begin()->second;
+        _leader = *_followers.begin();
         _leader->wakeUp();
-        _leaderChanged.store(true, memory_order_release);
-        _condition.notify_one();
         return;
     }
     
-    for (auto &[id, follower] : _followers)
+    for (auto &follower : _followers)
     {
         if (*follower != *_leader && !follower->isAwake())
         {
             {
                 unique_lock<mutex> guard(_outputMx);
-                cout << "Promoting new leader: " << id << endl;
+                cout << "Promoting new leader: " << follower->getId() << endl;
             }
             _leader = follower;
             _leader->wakeUp();
-            _leaderChanged.store(true, memory_order_release);
-            _condition.notify_one();
             return;
         }
     }
 }
 
-void LFThreadPool::join()
-{   
-    for (auto &[id, follower] : _followers)
-    {
-        {
-            unique_lock<mutex> guard(_outputMx);
-            cout << "Size of followers: " << _followers.size() << endl;
-            cout << "Joining thread: " << id << endl;
-        }
-        pthread_cancel(id);
-        pthread_join(id, nullptr);
-        follower.reset();
-    }
-}
 
-void LFThreadPool::followerLoop()
+void LFThreadPool::followerLoop(int id)
 {
     while (true)
     {
+        
+        _followers[id]->conditionWait(_stop);
         {
-            unique_lock<mutex> lock(_mx);
-            // Wait until this thread becomes the leader or stop is signaled
-            _condition.wait(lock, [this]
-                            { return (_leader != nullptr  && _leaderChanged.load(memory_order_acquire)) || _stop.load(memory_order_acquire); });
-            
-            _leaderChanged.store(false, memory_order_release);
-            {
-                unique_lock<mutex> guard(_outputMx);
-                cout << "This thread: " << pthread_self() << " vs leader: " << _leader->getId() << endl;
-            }
+            unique_lock<mutex> guard(_outputMx);
+            cout << "This thread: " << pthread_self() << " vs leader: " << _leader->getId() << endl;
         }
-
+        
         // If stop then the program is shutting down
         if (_stop.load(memory_order_acquire))
             break;
 
         // Handle events in the reactor
-        _reactor->handleEvents();
+        _reactor.handleEvents();
         
         // Promote a new leader without holding _mx lock
-        ThreadContext* currThread = _leader.get();
+        shared_ptr<ThreadContext> currThread = _leader;
         promoteNewLeader();
 
         // Execute events in the thread context
@@ -236,9 +202,25 @@ void LFThreadPool::stopPool()
 {
     // Stop all worker threads
     _stop.store(true, memory_order_release);
+    for (auto & follower : _followers)
     {
-        lock_guard<mutex> lock(_mx);
-        _condition.notify_all();
+        follower->notify();
     }
     join();
+}
+
+void LFThreadPool::join()
+{   
+    for (auto & follower : _followers)
+    {
+        pthread_t id = follower->getId();
+        {
+            unique_lock<mutex> guard(_outputMx);
+            cout << "Size of followers: " << _followers.size() << endl;
+            cout << "Joining thread: " << id << endl;
+        }
+        pthread_cancel(id);
+        pthread_join(id, nullptr);
+        follower.reset();
+    }
 }

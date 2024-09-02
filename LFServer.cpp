@@ -122,15 +122,11 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
                 int u = 0, v = 0, w = 0;
 
                 // Attempt to read and parse the edge data
-                //unique_lock<mutex> guard(ssLock);
                 if (!(ss >> u >> v >> w))
                 {
-
                     // Clear the stringstream and read new input from the socket
                     ss.clear();
                     ss.str("");
-                    // guard.unlock();
-                    // guard.release();
                     memset(buffer, 0, sizeof(buffer));
                     bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
 
@@ -155,7 +151,6 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
 
                     // Load the new input into the stringstream
                     {
-                        //unique_lock<mutex> guard(ssLock);
                         ss.write(buffer, bytesReceived);
 
                         // Attempt to parse again with the new data
@@ -212,7 +207,6 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
             
             response += mst->printMST();
 
-            this_thread::sleep_for(chrono::milliseconds(1));
         }
         else if (cmd == "Kruskal")
         {
@@ -241,8 +235,6 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
 
             response = "MST created using Kruskal's algorithm.\n";
             response += mst->printMST();
-
-            this_thread::sleep_for(chrono::milliseconds(1));
         }
 
         else if (cmd == "MSTweight")
@@ -255,9 +247,6 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
             response = "Total weight of the MST is: ";
 
             response += to_string(mst->totalWeight()) + "\n";
-            
-
-            this_thread::sleep_for(chrono::milliseconds(1));
         }
 
         else if (cmd == "Shortestpath")
@@ -272,14 +261,10 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
             int res;
             res = scanSrcDest(ss, src, dest);
             
-            this_thread::sleep_for(chrono::milliseconds(1));
-
             if (res == -1)
                 continue;
             response = "Shortest path from " + to_string(src) + " to " + to_string(dest) + " is: ";
             response += mst->shortestPath(src, dest);
-
-            this_thread::sleep_for(chrono::milliseconds(1));
         }
         else if (cmd == "Longestpath")
         {
@@ -288,19 +273,9 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
                 cerr << "MST not created" << endl;
                 continue;
             }
-
-            int src, dest;
-            int res;
+            response = "The longest path (diameter) of the MST is: ";
             
-            res = scanSrcDest(ss, src, dest);
-
-            if (res == -1)
-                continue;
-            response = "Longest path from " + to_string(src) + " to " + to_string(dest) + " is: ";
-            
-            response += mst->longestPath(src, dest);
-
-            this_thread::sleep_for(chrono::milliseconds(1));
+            response += to_string(mst->diameter()) +'\n';
         }
         else if (cmd == "Averdist")
         {
@@ -312,13 +287,15 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
 
             response = "Average distance of the MST is: ";
             response += to_string(mst->averageDistanceEdges()) + "\n";
-
-            this_thread::sleep_for(chrono::milliseconds(1));
         }
         else if (cmd == "Exit")
         {
             sendResponse(clientSock, "Goodbye\n");
-            cout << "Thread number " << this_thread::get_id() << " exiting" << endl;        
+            {
+                unique_lock<mutex> guard(coutLock);
+                cout << "Client: " << clientSock << " disconnected" << endl;
+                cout << "Thread: " << this_thread::get_id() << " exiting" << endl;
+            }                  
             clientNumber.store(clientNumber.load(memory_order_acquire) - 1, memory_order_release);
             break;
         }
@@ -333,9 +310,13 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
     close(clientSock);
 }
 
-void acceptConnection(int server_sock, unique_ptr<Graph> &g, MSTFactory &factory, unique_ptr<Tree> &mst, LFThreadPool &pool)
+void acceptConnection(int server_sock, unique_ptr<Graph> &g, MSTFactory &factory, unique_ptr<Tree> &mst, unique_ptr<LFThreadPool> &pool)
 {
-    cout << "Thread number " << this_thread::get_id() << " accepting connection" << endl;
+    {
+        unique_lock<mutex> guard(coutLock);
+        cout << "Accepting connection on thread: " << this_thread::get_id() << endl;
+    }
+
     struct sockaddr_in client_addr;
     socklen_t sin_size = sizeof(client_addr);
     int client_sock = accept(server_sock, (struct sockaddr *)&client_addr, &sin_size);
@@ -351,21 +332,23 @@ void acceptConnection(int server_sock, unique_ptr<Graph> &g, MSTFactory &factory
         unique_lock<mutex> guard(coutLock);
         cout << "New connection from " << s << " on socket " << client_sock << endl;
         cout << "Currently " << clientNumber << " clients connected" << endl;
-        cout << "Server socket: " << server_sock << " Client socket: " << client_sock << endl;
     }
     // Create new event handler for handling the commands and add it to the reactor
-    function<void()> commandHandler = [&client_sock, &g, &factory, &mst]()
+    function<void()> commandHandler = [client_sock, &g, &factory, &mst]()
     {
         handleCommands(client_sock, g, factory, mst);
     };
-    pool.addFd(client_sock, commandHandler);
-    cout << "Client: " << client_sock << " was assigned to thread: " << this_thread::get_id() << endl;
+    pool->addFd(client_sock, commandHandler);
+    {
+        unique_lock<mutex> guard(coutLock);
+        cout << "Client: " << client_sock << " was assigned to thread: " << this_thread::get_id() << endl;
+    }
 }
 
 int main()
 {
     signal(SIGINT, signalHandler);
-    shared_ptr<Reactor> reactor = make_shared<Reactor>();
+    unique_ptr<Reactor> reactor = make_unique<Reactor>();
     unique_ptr<Graph> g;
     unique_ptr<Tree> t;
     MSTFactory factory;
@@ -432,9 +415,9 @@ int main()
     }
 
     // Add the acceptConnection function to the reactor as a lambda function
-    pool = make_unique<LFThreadPool>(10, reactor);
+    pool = make_unique<LFThreadPool>(10, *reactor);
     reactor->addHandle(serverSock, [serverSock, &g, &factory, &t, &pool]()
-                       { acceptConnection(serverSock, g, factory, t, *pool); });
+                       { acceptConnection(serverSock, g, factory, t, pool); });
     // Allow the threads in the pool to run without the finishing the server
     {
         unique_lock<mutex> guard(coutLock);

@@ -14,6 +14,21 @@
             },
             "problemMatcher": ["$gcc"],
             "detail": "Generated task for building the PipelineServer using Makefile."
+        },
+
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "make",
+            "args": [
+                "LFServer"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$gcc"],
+            "detail": "Generated task for building the LFServer using Makefile."
         }
     ]
 }

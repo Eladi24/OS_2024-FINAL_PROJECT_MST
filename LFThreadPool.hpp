@@ -72,26 +72,24 @@ class ThreadContext
         mutex _thMx;
         condition_variable _thCv;
         atomic<bool> _isAwake;
+        unique_ptr<function<void()>> _functUniquePtr;
         
     public:
         ThreadContext() : _clientFd(-1), _isAwake(false) {}
         ThreadContext(pthread_t loop): _thread(loop), _isAwake(false) {}
-        ThreadContext(function<void()> th);
-        // ThreadContext(ThreadContext&& other) noexcept :_clientFd(other._clientFd),_event(move(other._event)), _thread(move(other._thread)) {}
-        // ThreadContext& operator=(ThreadContext&& other) noexcept;
-        // ThreadContext(const ThreadContext& other) = delete;
-        // ThreadContext& operator=(const ThreadContext& other) = delete;
-        ~ThreadContext() {}
-        void createThread(function<void()> func);
+        ~ThreadContext() { _functUniquePtr.reset(); }
+        pthread_t createThread(function<void()> func);
         void addHandle(int fd, function<void()> event) { _clientFd = fd; _event = event; }
         void executeEvent() { _event(); }
         pthread_t getId() const { return _thread; }
         bool operator==(const ThreadContext& other) { return _thread == other._thread; }
         bool operator!=(const ThreadContext& other) { return _thread != other._thread; }
-        void wakeUp() { _isAwake.store(true, memory_order_release); }
-        void sleep() { _isAwake.store(false, memory_order_release); }
+        void wakeUp(); 
+        void sleep(); 
         bool isAwake() { return _isAwake.load(memory_order_acquire); }
         int getClientFd() const { return _clientFd; }
+        void conditionWait(const atomic<bool>& stopFlag);
+        void notify() { unique_lock<mutex> lock(_thMx); _thCv.notify_one(); }
         
                 
         
@@ -100,22 +98,22 @@ class ThreadContext
 class LFThreadPool
 {
 private:
-    map<pthread_t, shared_ptr<ThreadContext>> _followers; // map of sleeping threads followers
+    
+    vector<shared_ptr<ThreadContext>> _followers;
     mutex _mx;    
     static mutex _outputMx; // Mutex to protect the output
     condition_variable _condition; // Condition variable to wake up the leader
     atomic<bool> _stop; // Flag to stop the pool and wake all the followers
     atomic<bool> _leaderChanged; // Flag to indicate that the leader has changed
-    shared_ptr<Reactor> _reactor; // Reactor to handle the events
+    Reactor& _reactor; // Reactor to handle the events
     shared_ptr<ThreadContext> _leader;
-    void followerLoop();
+    void followerLoop(int id);
     
 public:
-    LFThreadPool(size_t numThreads, shared_ptr<Reactor> reactor);
+    LFThreadPool(size_t numThreads, Reactor& reactor);
     ~LFThreadPool();
     void promoteNewLeader();
     void join();
-    
     void stopPool();
     void addFd(int fd, function<void()> event);
     static mutex& getOutputMx() { return _outputMx; }

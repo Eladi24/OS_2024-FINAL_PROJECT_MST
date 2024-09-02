@@ -119,7 +119,14 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
         string future;
 
         if (cmd == "Newgraph") {
-            unique_lock<mutex> graphGuard(graphLock); // Lock for graph operations
+            // Lock the graph mutex to prevent other threads from using the graph
+            unique_lock<mutex> graphGuard(graphLock, try_to_lock);
+
+            // If the graph resource is being used by another thread, the current thread will not be blocked
+            if (!graphGuard.owns_lock()) {
+                sendResponse(clientSock, "Graph is being used by another thread. Cannot initialize new graph.\n");
+                continue;
+            }
             if (g != nullptr) {
                 g.reset();
                 g = nullptr;
@@ -289,19 +296,19 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
             atomic<int> src{-1}, dest{-1};
             atomic<int> res{0};
 
-            std::mutex resMutex;
-            std::condition_variable resCv;
+            mutex resMutex;
+            condition_variable resCv;
             bool ready = false;
 
             pipeline[4]->enqueue([&ss, &src, &dest, &res, &resMutex, &resCv, &ready]() {
                 res.store(scanSrcDest(ss, src, dest), memory_order_release);
-                std::lock_guard<std::mutex> lock(resMutex);
+                unique_lock<mutex> lock(resMutex);
                 ready = true;
                 resCv.notify_one();
             });
 
             {
-                std::unique_lock<std::mutex> lock(resMutex);
+                unique_lock<mutex> lock(resMutex);
                 resCv.wait(lock, [&ready]() { return ready; });
             }
 
