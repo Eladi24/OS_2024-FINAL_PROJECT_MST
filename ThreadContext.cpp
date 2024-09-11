@@ -14,7 +14,6 @@ pthread_t  ThreadContext::createThread(function<void()> func)
           
         return nullptr;
     }, _functUniquePtr.get());
-
     // Check for thread creation errors
     if (result != 0) {
         throw runtime_error("Failed to create thread");

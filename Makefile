@@ -2,6 +2,8 @@
 CXX = g++
 # Compiler flags
 CXXFLAGS = -std=c++17 -Wall -g
+# Gcov flags
+CCOV = -fprofile-arcs -ftest-coverage
 # Valgrind flags
 Valgrind_FLAGS = valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=99 --track-origins=yes --verbose --log-file=
 # Helgrind flags
@@ -24,18 +26,18 @@ LF_OBJ = $(LF_SRC:.cpp=.o)
 all: PipelineServer LFServer
 	
 PipelineServer: $(LIB_TARGET) $(PIP_OBJ)
-	$(CXX) $(CXXFLAGS) -o $@ $(PIP_OBJ) ./$(LIB_TARGET) -lpthread
+	$(CXX) $(CXXFLAGS) $(CCOV) -o $@ $(PIP_OBJ) ./$(LIB_TARGET) -pthread
 
 LFServer: $(LIB_TARGET) $(LF_OBJ)
-	$(CXX) $(CXXFLAGS) -o $@ $(LF_OBJ) ./$(LIB_TARGET) -lpthread
+	$(CXX) $(CXXFLAGS) $(CCOV) -o $@ $(LF_OBJ) ./$(LIB_TARGET) -pthread
 
 # Library
 $(LIB_TARGET): $(LIB_OBJ)
-	$(CXX) -shared -o $@ $(LIB_OBJ)
+	$(CXX) $(CCOV) -shared -pthread -o $@ $(LIB_OBJ)
 
 # Object files
 %.o: %.cpp
-	$(CXX) $(CXXFLAGS) -fPIC -c $<
+	$(CXX) $(CXXFLAGS) $(CCOV) -pthread -fPIC -c $<
 
 # Valgrind Pipeline Server
 pipeline_valgrind: PipelineServer
@@ -57,6 +59,34 @@ lf_helgrind: LFServer
 	clear
 	$(Helgrind_FLAGS)lf-helgrind-out.txt ./LFServer
 
+pipeline_gcov: PipelineServer
+	clear
+	./PipelineServer
+	gcov -b PipelineServer.cpp
+	gcov -b ActiveObject.cpp
+	gcov -b Graph.cpp
+	gcov -b Tree.cpp
+	gcov -b MSTStrategy.cpp
+	gcov -b MSTFactory.cpp
+	lcov --capture --directory PipelineServer.cpp ActiveObject.cpp Graph.cpp Tree.cpp MSTStrategy.cpp MSTFactory.cpp --output-file pipeline-coverage.info
+
+lf_gcov: LFServer
+	clear
+	./LFServer
+	gcov -b LFServer.cpp
+	gcov -b LFThreadPool.cpp
+	gcov -b Reactor.cpp
+	gcov -b ThreadContext.cpp
+	gcov -b Graph.cpp
+	gcov -b Tree.cpp
+	gcov -b MSTStrategy.cpp
+	gcov -b MSTFactory.cpp
+	lcov --capture --directory LFServer.cpp LFThreadPool.cpp Reactor.cpp ThreadContext.cpp Graph.cpp Tree.cpp MSTStrategy.cpp MSTFactory.cpp --output-file lf-coverage.info
+
+lcov: 
+	lcov --add-tracefile pipeline-coverage.info --add-tracefile lf-coverage.info --output-file coverage.info
+	genhtml coverage.info --output-directory out
+
 # Rebuild
 rebuild: clean all
 
@@ -68,4 +98,4 @@ clear:
 
 # Clean
 clean:
-	rm -f *.o *.so *.txt PipelineServer LFServer
+	rm -f *.o *.so *.txt *.gcda *.gcno *.gcov *.info PipelineServer LFServer
