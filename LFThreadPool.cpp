@@ -11,7 +11,10 @@ LFThreadPool::LFThreadPool(size_t numThreads, Reactor& reactor)
         _followers[i] = make_shared<ThreadContext>();
         // Create a new thread and bind the follower loop function
         _followers[i]->createThread(bind(&LFThreadPool::followerLoop, this, i));
-        
+        {
+            unique_lock<mutex> guard(_outputMx);
+            cout << "Following thread created: " << _followers[i]->getId() << endl;
+        }
     }
     // Promote the initial leader
     promoteNewLeader();
@@ -19,7 +22,11 @@ LFThreadPool::LFThreadPool(size_t numThreads, Reactor& reactor)
 
 LFThreadPool::~LFThreadPool()
 {
-    // Stop the thread pool
+    {
+        unique_lock<mutex> guard(_outputMx);
+        cout << "LFThreadPool destructor" << endl;
+    }
+    
     stopPool();
     // Clean the allocated resources
     _followers.clear();
@@ -111,13 +118,14 @@ void LFThreadPool::stopPool()
 }
 
 void LFThreadPool::join()
-{
-    {
-        unique_lock<mutex> guard(_outputMx);
-        cout << "Joining threads..." << endl;
-    }   
+{   
     for (auto & follower : _followers)
     {
+        pthread_t id = follower->getId();
+        {
+            unique_lock<mutex> guard(_outputMx);
+            cout << "Joining thread: " << id << endl;
+        }
         // Cancel the thread and join it
         follower->cancel();
         follower->join();

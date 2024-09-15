@@ -61,27 +61,13 @@ lf_helgrind: LFServer
 
 pipeline_gcov: PipelineServer
 	clear
-	./PipelineServer
 	gcov -b PipelineServer.cpp
-	gcov -b ActiveObject.cpp
-	gcov -b Graph.cpp
-	gcov -b Tree.cpp
-	gcov -b MSTStrategy.cpp
-	gcov -b MSTFactory.cpp
-	lcov --capture --directory PipelineServer.cpp ActiveObject.cpp Graph.cpp Tree.cpp MSTStrategy.cpp MSTFactory.cpp --output-file pipeline-coverage.info
+	lcov --capture --directory . --output-file pipeline-coverage.info
 
 lf_gcov: LFServer
 	clear
-	./LFServer
 	gcov -b LFServer.cpp
-	gcov -b LFThreadPool.cpp
-	gcov -b Reactor.cpp
-	gcov -b ThreadContext.cpp
-	gcov -b Graph.cpp
-	gcov -b Tree.cpp
-	gcov -b MSTStrategy.cpp
-	gcov -b MSTFactory.cpp
-	lcov --capture --directory LFServer.cpp LFThreadPool.cpp Reactor.cpp ThreadContext.cpp Graph.cpp Tree.cpp MSTStrategy.cpp MSTFactory.cpp --output-file lf-coverage.info
+	lcov --capture --directory . --output-file lf-coverage.info 
 
 lcov: 
 	lcov --add-tracefile pipeline-coverage.info --add-tracefile lf-coverage.info --output-file coverage.info
@@ -91,7 +77,9 @@ lcov:
 rebuild: clean all
 
 clear:
-	rm -f *.txt
+	rm -f *.txt *.info 
+	rm -rf out
+	clear
 	
 # Phony
 .PHONY: clean all rebuild pipeline_valgrind pipeline_helgrind lf_valgrind lf_helgrind

@@ -16,7 +16,7 @@ const int port = 4050;
 function<void(int)> signalHandlerLambda;
 atomic<int> clientNumber(0);
 mutex graphMutex;
-mutex& coutLock = LFThreadPool::getOutputMx();
+mutex &coutLock = LFThreadPool::getOutputMx();
 
 void signalHandler(int signum)
 {
@@ -62,7 +62,7 @@ int scanSrcDest(stringstream &ss, int &src, int &dest)
 
 void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, unique_ptr<Tree> &mst)
 {
-    
+
     char buffer[1024];
     int bytesReceived;
     while (true)
@@ -87,8 +87,7 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
         }
         buffer[bytesReceived] = '\0';
         string command(buffer);
-        if (command.empty())
-            continue;
+        if (command.empty()) continue;
 
         stringstream ss(command);
         string cmd;
@@ -115,10 +114,15 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
                 mst = nullptr;
             }
             int n, m;
-            scanGraph(clientSock, n, m, ss, g);
-            
+            int res = scanGraph(clientSock, n, m, ss, g);
+            if (res == -1)
+            {
+                sendResponse(clientSock, "Invalid graph input. Please enter 2 integers for n and m.\n");
+                continue;
+            }
+
             // Wait for the graph to be created
-           for (int i = 0; i < m; i++)
+            for (int i = 0; i < m; i++)
             {
                 int u = 0, v = 0, w = 0;
 
@@ -179,7 +183,7 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
 
         else if (cmd == "Prim")
         {
-             unique_lock<mutex> guard(graphMutex, try_to_lock);
+            unique_lock<mutex> guard(graphMutex, try_to_lock);
             if (!guard.owns_lock())
             {
                 response = "Graph is being used by another thread can't search for MST prim.\n";
@@ -190,7 +194,7 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
             if (g == nullptr || g->getAdj().empty())
             {
                 cerr << "Graph not initialized" << endl;
-                
+
                 continue;
             }
             if (mst != nullptr)
@@ -198,16 +202,14 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
                 mst.reset();
                 mst = nullptr;
             }
-            
-            
+
             factory.setStrategy(new PrimStrategy());
 
             mst = factory.createMST(g);
 
             response = "MST created using Prim's algorithm.\n";
-            
-            response += mst->printMST();
 
+            response += mst->printMST();
         }
         else if (cmd == "Kruskal")
         {
@@ -228,10 +230,9 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
                 mst.reset();
                 mst = nullptr;
             }
-            
 
-           factory.setStrategy(new KruskalStrategy());
-            
+            factory.setStrategy(new KruskalStrategy());
+
             mst = factory.createMST(g);
 
             response = "MST created using Kruskal's algorithm.\n";
@@ -263,7 +264,7 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
             int src, dest;
             int res;
             res = scanSrcDest(ss, src, dest);
-            
+
             if (res == -1)
                 continue;
             response = "Shortest path from " + to_string(src) + " to " + to_string(dest) + " is: ";
@@ -278,8 +279,8 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
                 continue;
             }
             response = "The longest path (diameter) of the MST is: ";
-            
-            response += to_string(mst->diameter()) +'\n';
+
+            response += to_string(mst->diameter()) + '\n';
         }
         else if (cmd == "Averdist")
         {
@@ -300,17 +301,16 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
                 unique_lock<mutex> guard(coutLock);
                 cout << "Client: " << clientSock << " disconnected" << endl;
                 cout << "Thread: " << this_thread::get_id() << " exiting" << endl;
-            }                  
+            }
             clientNumber.store(clientNumber.load(memory_order_acquire) - 1, memory_order_release);
             break;
         }
         else
         {
-            cerr << "Unknown command: " << cmd << endl;
+            response = "Invalid command: " + cmd + "\n";
         }
         // Send the response to the client
         sendResponse(clientSock, response);
-        
     }
     close(clientSock);
 }
@@ -360,7 +360,7 @@ int main()
     unique_ptr<LFThreadPool> pool;
     // The server socket
     int serverSock;
-    
+
     signalHandlerLambda = [&](int signum)
     {
         {
@@ -374,7 +374,7 @@ int main()
         g.reset();
         t.reset();
     };
-    
+
     struct sockaddr_in serverAddr;
     // The opt variable is used to set the socket options
     int opt = 1;
@@ -431,7 +431,6 @@ int main()
     while (true)
     {
         this_thread::sleep_for(chrono::milliseconds(1));
-
     }
     return 0;
 }

@@ -9,7 +9,6 @@ class MSTFactory
         unique_ptr<MSTStrategy> _strategy;
         
     public:
-        ~MSTFactory(){_strategy.reset();}
         /*
         * @brief This method will set the strategy that will be used to find the minimum spanning tree.
         * @param strategy The strategy that will be used to find the minimum spanning tree.

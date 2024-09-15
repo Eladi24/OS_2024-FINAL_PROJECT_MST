@@ -52,7 +52,6 @@ public:
 
     ~ActiveObject();
     
-    void start();
     /*
     * @brief
     * This function enqueues a task to be executed by the worker thread.

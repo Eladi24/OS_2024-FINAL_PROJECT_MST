@@ -3,10 +3,6 @@
 mutex ActiveObject::_outputMx;
 ActiveObject::~ActiveObject()
 {
-    // {
-    //     lock_guard<mutex> lock(_outputMx);
-    //     cout << "ActiveObject destructor" << endl;
-    // }
     // Let the worker thread know that it should stop
     _done.store(true, memory_order_release);
     // Wake up the worker thread
@@ -17,13 +13,6 @@ ActiveObject::~ActiveObject()
     // Wait for the worker thread to finish its previous task
     _worker.join();
 }
-
-void ActiveObject::start()
-{
-    
-    _worker = thread(&ActiveObject::run, this);
-}
-
 
 void ActiveObject::run()
 {   

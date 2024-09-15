@@ -136,15 +136,15 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
                 mst = nullptr;
             }
 
-            int n, m;
+            int n, m, res = 0;
             mutex initLock;
             atomic<bool> initDone(false);
             condition_variable initCV;
 
-            pipeline[0]->enqueue([&ss, &n, &m, &g, &ssLock, &initLock, &initDone, &initCV]() {
+            pipeline[0]->enqueue([&ss, &n, &m, &g, &ssLock, &initLock, &initDone, &initCV, &res]() {
                 unique_lock<mutex> guard2(ssLock);
                 unique_lock<mutex> guard(initLock);
-                scanGraph(n, m, ss, g);
+                res = scanGraph(n, m, ss, g);     
                 initDone.store(true, memory_order_release);
                 initCV.notify_one();
             });
@@ -155,6 +155,10 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
                 while (!initDone) {
                     initCV.wait(guard);
                 }
+            }
+            if (res == -1) {
+                sendResponse(clientSock, "Invalid graph input. Please enter 2 integers for n and m.\n");
+                continue;
             }
 
             for (int i = 0; i < m; i++) {

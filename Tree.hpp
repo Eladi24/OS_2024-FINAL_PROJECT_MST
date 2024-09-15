@@ -27,9 +27,9 @@ class Tree: public Graph
           int diameter();
         string shortestPath(int u, int v);
         string reconstructPath(int src, int dest, const vector<int> &parentTrack, int totalWeight);
-        string longestPath(int u, int v);
+        
         void addEdge(int u, int v, int w) override;
-        void removeEdge(int u, int v) override;
+        void removeEdge(int u, int v);
         string printMST();
 
 };

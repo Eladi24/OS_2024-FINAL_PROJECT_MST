@@ -1,0 +1,7 @@
+Kruskal
+Prim
+Averdist
+Longestpath
+MSTweight
+Shortestpath 1 2
+Exit

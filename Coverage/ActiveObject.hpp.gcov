@@ -1,0 +1,324 @@
+        -:    0:Source:ActiveObject.hpp
+        -:    0:Graph:PipelineServer.gcno
+        -:    0:Data:PipelineServer.gcda
+        -:    0:Runs:1
+        -:    1:#ifndef _ACTIVEOBJECT_HPP
+        -:    2:#define _ACTIVEOBJECT_HPP
+        -:    3:
+        -:    4:#include <iostream>
+        -:    5:#include <thread>
+        -:    6:#include <mutex>
+        -:    7:#include <condition_variable>
+        -:    8:#include <queue>
+        -:    9:#include <functional>
+        -:   10:#include <atomic>
+        -:   11:using namespace std;
+        -:   12:
+        -:   13:/**
+        -:   14: * @class ActiveObject
+        -:   15: * 
+        -:   16: * This class is a simple implementation of the Active Object pattern.
+        -:   17: * It allows tasks to be enqueued and executed by a separate thread.
+        -:   18: * 
+        -:   19: * The class is templated to allow for any type of function to be enqueued.
+        -:   20: * 
+        -:   21: * The class is not thread-safe for the enqueuing of tasks, but is thread-safe
+        -:   22: * for the execution of tasks.
+        -:   23: * 
+        -:   24: * The components of this pattern are:
+        -:   25: * Proxy: The interface that clients use to interact with the Active Object (a.k.a. Pipeline server)
+        -:   26: * MethodRequest: The task that is enqueued and executed by the Active Object (a.k.a. function object Task)
+        -:   27: * Scheduler: The component that has a list of tasks to be executed by the Active Object (a.k.a. Task queue)
+        -:   28: * Servant: The component that actually executes the tasks (a.k.a. Worker thread)
+        -:   29: * Future: The result of the task execution (a.k.a. response to the client)
+        -:   30: */
+        -:   31:class ActiveObject
+        -:   32:{
+        -:   33:private:
+        -:   34:    queue<function<void()>> _tasks; // Task queue
+        -:   35:    mutex _mx; // Mutex to protect the task queue
+        -:   36:    condition_variable _cv; // Condition variable to wake up the worker thread
+        -:   37:    atomic<bool> _done; // Flag to signal the worker thread to stop
+        -:   38:    thread _worker; // Worker thread
+        -:   39:    static mutex _outputMx; // Mutex to protect the output stream
+        -:   40:
+        -:   41:   /*
+        -:   42:    * @brief 
+        -:   43:    * The worker thread function
+        -:   44:    * This function is the main loop of the worker thread.
+        -:   45:    * It waits for tasks to be enqueued and executes them.
+        -:   46:    * @return void
+        -:   47:   */
+        -:   48:    void run();
+        -:   49:
+        -:   50:public:
+function _ZN12ActiveObjectC2Ev called 7 returned 100% blocks executed 58%
+        7:   51:    ActiveObject() :_tasks(), _done(false), _worker(&ActiveObject::run, this) {}
+call    0 returned 100%
+call    1 returned 100%
+call    2 returned 100%
+call    3 returned 100%
+call    4 returned 100%
+branch  5 taken 100% (fallthrough)
+branch  6 taken 0% (throw)
+call    7 never executed
+call    8 never executed
+        -:   52:
+        -:   53:    ~ActiveObject();
+        -:   54:    
+        -:   55:    /*
+        -:   56:    * @brief
+        -:   57:    * This function enqueues a task to be executed by the worker thread.
+        -:   58:    * It is templated to allow for any type of function to be enqueued.
+        -:   59:    * @param task The task to be enqueued
+        -:   60:    * @return void
+        -:   61:    */
+        -:   62:    template <class F>
+       36:   63:    void enqueue(F task)
+        -:   64:    {   
+        -:   65:        // Lock the mutex to protect the task queue
+       36:   66:        unique_lock<mutex> lock(_mx);
+        -:   67:        // Move the task into the task queue
+       36:   68:        _tasks.emplace(task);
+        -:   69:        // Wake up the worker thread
+       36:   70:        _cv.notify_one();
+       36:   71:    }
+------------------
+_ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE10_EEvT_:
+function _ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE10_EEvT_ called 2 returned 100% blocks executed 75%
+        2:   63:    void enqueue(F task)
+        -:   64:    {   
+        -:   65:        // Lock the mutex to protect the task queue
+        2:   66:        unique_lock<mutex> lock(_mx);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   67:        // Move the task into the task queue
+        2:   68:        _tasks.emplace(task);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   69:        // Wake up the worker thread
+        2:   70:        _cv.notify_one();
+call    0 returned 100%
+        2:   71:    }
+call    0 returned 100%
+call    1 never executed
+------------------
+_ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE9_EEvT_:
+function _ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE9_EEvT_ called 2 returned 100% blocks executed 75%
+        2:   63:    void enqueue(F task)
+        -:   64:    {   
+        -:   65:        // Lock the mutex to protect the task queue
+        2:   66:        unique_lock<mutex> lock(_mx);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   67:        // Move the task into the task queue
+        2:   68:        _tasks.emplace(task);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   69:        // Wake up the worker thread
+        2:   70:        _cv.notify_one();
+call    0 returned 100%
+        2:   71:    }
+call    0 returned 100%
+call    1 never executed
+------------------
+_ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE8_EEvT_:
+function _ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE8_EEvT_ called 3 returned 100% blocks executed 75%
+        3:   63:    void enqueue(F task)
+        -:   64:    {   
+        -:   65:        // Lock the mutex to protect the task queue
+        3:   66:        unique_lock<mutex> lock(_mx);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   67:        // Move the task into the task queue
+        3:   68:        _tasks.emplace(task);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   69:        // Wake up the worker thread
+        3:   70:        _cv.notify_one();
+call    0 returned 100%
+        3:   71:    }
+call    0 returned 100%
+call    1 never executed
+------------------
+_ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE6_EEvT_:
+function _ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE6_EEvT_ called 5 returned 100% blocks executed 75%
+        5:   63:    void enqueue(F task)
+        -:   64:    {   
+        -:   65:        // Lock the mutex to protect the task queue
+        5:   66:        unique_lock<mutex> lock(_mx);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   67:        // Move the task into the task queue
+        5:   68:        _tasks.emplace(task);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   69:        // Wake up the worker thread
+        5:   70:        _cv.notify_one();
+call    0 returned 100%
+        5:   71:    }
+call    0 returned 100%
+call    1 never executed
+------------------
+_ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE5_EEvT_:
+function _ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE5_EEvT_ called 2 returned 100% blocks executed 75%
+        2:   63:    void enqueue(F task)
+        -:   64:    {   
+        -:   65:        // Lock the mutex to protect the task queue
+        2:   66:        unique_lock<mutex> lock(_mx);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   67:        // Move the task into the task queue
+        2:   68:        _tasks.emplace(task);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   69:        // Wake up the worker thread
+        2:   70:        _cv.notify_one();
+call    0 returned 100%
+        2:   71:    }
+call    0 returned 100%
+call    1 never executed
+------------------
+_ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE4_EEvT_:
+function _ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE4_EEvT_ called 2 returned 100% blocks executed 75%
+        2:   63:    void enqueue(F task)
+        -:   64:    {   
+        -:   65:        // Lock the mutex to protect the task queue
+        2:   66:        unique_lock<mutex> lock(_mx);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   67:        // Move the task into the task queue
+        2:   68:        _tasks.emplace(task);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   69:        // Wake up the worker thread
+        2:   70:        _cv.notify_one();
+call    0 returned 100%
+        2:   71:    }
+call    0 returned 100%
+call    1 never executed
+------------------
+_ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE3_EEvT_:
+function _ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE3_EEvT_ called 2 returned 100% blocks executed 75%
+        2:   63:    void enqueue(F task)
+        -:   64:    {   
+        -:   65:        // Lock the mutex to protect the task queue
+        2:   66:        unique_lock<mutex> lock(_mx);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   67:        // Move the task into the task queue
+        2:   68:        _tasks.emplace(task);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   69:        // Wake up the worker thread
+        2:   70:        _cv.notify_one();
+call    0 returned 100%
+        2:   71:    }
+call    0 returned 100%
+call    1 never executed
+------------------
+_ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE2_EEvT_:
+function _ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE2_EEvT_ called 2 returned 100% blocks executed 75%
+        2:   63:    void enqueue(F task)
+        -:   64:    {   
+        -:   65:        // Lock the mutex to protect the task queue
+        2:   66:        unique_lock<mutex> lock(_mx);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   67:        // Move the task into the task queue
+        2:   68:        _tasks.emplace(task);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   69:        // Wake up the worker thread
+        2:   70:        _cv.notify_one();
+call    0 returned 100%
+        2:   71:    }
+call    0 returned 100%
+call    1 never executed
+------------------
+_ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE1_EEvT_:
+function _ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE1_EEvT_ called 2 returned 100% blocks executed 75%
+        2:   63:    void enqueue(F task)
+        -:   64:    {   
+        -:   65:        // Lock the mutex to protect the task queue
+        2:   66:        unique_lock<mutex> lock(_mx);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   67:        // Move the task into the task queue
+        2:   68:        _tasks.emplace(task);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   69:        // Wake up the worker thread
+        2:   70:        _cv.notify_one();
+call    0 returned 100%
+        2:   71:    }
+call    0 returned 100%
+call    1 never executed
+------------------
+_ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE0_EEvT_:
+function _ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE0_EEvT_ called 10 returned 100% blocks executed 75%
+       10:   63:    void enqueue(F task)
+        -:   64:    {   
+        -:   65:        // Lock the mutex to protect the task queue
+       10:   66:        unique_lock<mutex> lock(_mx);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   67:        // Move the task into the task queue
+       10:   68:        _tasks.emplace(task);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   69:        // Wake up the worker thread
+       10:   70:        _cv.notify_one();
+call    0 returned 100%
+       10:   71:    }
+call    0 returned 100%
+call    1 never executed
+------------------
+_ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE_EEvT_:
+function _ZN12ActiveObject7enqueueIZ14handleCommandsiRSt6vectorISt10unique_ptrIS_St14default_deleteIS_EESaIS5_EERS2_I5GraphS3_IS9_EER10MSTFactoryRS2_I4TreeS3_ISF_EEEUlvE_EEvT_ called 4 returned 100% blocks executed 75%
+        4:   63:    void enqueue(F task)
+        -:   64:    {   
+        -:   65:        // Lock the mutex to protect the task queue
+        4:   66:        unique_lock<mutex> lock(_mx);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   67:        // Move the task into the task queue
+        4:   68:        _tasks.emplace(task);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:   69:        // Wake up the worker thread
+        4:   70:        _cv.notify_one();
+call    0 returned 100%
+        4:   71:    }
+call    0 returned 100%
+call    1 never executed
+------------------
+        -:   72:
+function _ZN12ActiveObject14getOutputMutexEv called 1 returned 100% blocks executed 100%
+        1:   73:    static mutex& getOutputMutex() { return _outputMx; }
+        -:   74:    
+        -:   75:};
+        -:   76:
+        -:   77:#endif

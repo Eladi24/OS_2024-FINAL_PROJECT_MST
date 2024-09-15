@@ -53,13 +53,7 @@ public:
      * @param event The event handler function to associate with the file descriptor.
      */
     void addHandle(int fd, function<void()> event);
-
-    /**
-     * @brief Removes a file descriptor and its corresponding event handler from the Reactor.
-     * @param fd The file descriptor to remove.
-     */
-    void removeHandle(int fd);
-
+    
     /**
      * @brief Waits for events on the registered file descriptors and invokes the corresponding event handlers.
      * @return The number of events handled.

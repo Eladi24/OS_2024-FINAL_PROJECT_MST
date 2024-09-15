@@ -10,7 +10,6 @@
 */
 class MSTStrategy {
     public:
-        virtual ~MSTStrategy() = default;
         /*
         * @brief This method will find the minimum spanning tree of the graph g.
         * It is a pure virtual method, so it must be implemented by the concrete classes.

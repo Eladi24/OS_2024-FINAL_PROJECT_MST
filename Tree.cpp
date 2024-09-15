@@ -88,6 +88,10 @@ string Tree::shortestPath(int u, int v)
     {
         return to_string(u) + " -> " + to_string(v) + " (0)\n";  // Trivial path to self
     }
+    if (u > V || v > V)
+    {
+        return "Invalid vertices\n";
+    }
 
     vector<int> parentTrack(V, -1);
     vector<int> dist = dijkstra(u, parentTrack);

@@ -7,12 +7,6 @@ void Reactor::addHandle(int fd, function<void()> event)
     _handlers[fd] = event;
 }
 
-void Reactor::removeHandle(int fd)
-{
-    FD_CLR(fd, &_master);
-    _handlers.erase(fd);
-}
-
 int Reactor::handleEvents()
 {
     // Copy the master set to prevent modification during select

@@ -22,12 +22,12 @@ class Graph {
         Graph(): V(0), E(0) {}
         Graph(int V, int E): V(V), E(E) { adj.resize(V); }
         virtual ~Graph() = default;
-        virtual void init();
+        
         virtual void addEdge(int u, int v, int w);
-        virtual void removeEdge(int u, int v);
+        // virtual void removeEdge(int u, int v);
         int getVerticesNumber() const { return V; }
         const vector<vector<Edge>>& getAdj() const { return adj; }
-        vector<vector<int>> getAdjMatrix() const;
+        // vector<vector<int>> getAdjMatrix() const;
         
 };
 
