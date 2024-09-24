@@ -9,26 +9,42 @@
 #include "Graph.hpp"
 #include "Tree.hpp"
 #include "MSTFactory.hpp"
-#include "MSTFactory.hpp"
 #include "LFThreadPool.hpp"
 
-const int port = 4050;
-function<void(int)> signalHandlerLambda;
-atomic<int> clientNumber(0);
-mutex graphMutex;
-mutex &coutLock = LFThreadPool::getOutputMx();
+// Constants
+const int port = 4050; ///< Server port number
 
+// Global variables
+function<void(int)> signalHandlerLambda; ///< Lambda function for handling signals
+atomic<int> clientNumber(0); ///< Tracks the number of connected clients
+mutex graphMutex; ///< Mutex for synchronizing access to the graph
+mutex &coutLock = LFThreadPool::getOutputMx(); ///< Mutex for synchronizing console output
+
+/**
+ * @brief Signal handler function.
+ * 
+ * This function handles interrupt signals (e.g., SIGINT) and performs
+ * cleanup operations before exiting the program.
+ * 
+ * @param signum The signal number.
+ */
 void signalHandler(int signum)
 {
     {
         unique_lock<mutex> guard(coutLock);
         cout << "Interrupt signal (" << signum << ") received." << endl;
     }
-    // Free memory
+    // Free memory and exit
     signalHandlerLambda(signum);
     exit(signum);
 }
 
+/**
+ * @brief Sends a response to the client.
+ * 
+ * @param clientSock The client's socket descriptor.
+ * @param response The response string to be sent.
+ */
 void sendResponse(int clientSock, const string &response)
 {
     if (send(clientSock, response.c_str(), response.size(), 0) < 0)
@@ -37,6 +53,16 @@ void sendResponse(int clientSock, const string &response)
     }
 }
 
+/**
+ * @brief Scans the graph input from the client.
+ * 
+ * @param clientSock The client's socket descriptor.
+ * @param n Number of vertices.
+ * @param m Number of edges.
+ * @param ss The stringstream containing the client's input.
+ * @param g Unique pointer to the graph object.
+ * @return int 0 if successful, -1 otherwise.
+ */
 int scanGraph(int clientSock, int &n, int &m, stringstream &ss, unique_ptr<Graph> &g)
 {
     if (!(ss >> n >> m) || n <= 0 || m < 0)
@@ -49,6 +75,14 @@ int scanGraph(int clientSock, int &n, int &m, stringstream &ss, unique_ptr<Graph
     return 0;
 }
 
+/**
+ * @brief Scans source and destination vertices from the client's input.
+ * 
+ * @param ss The stringstream containing the client's input.
+ * @param src Source vertex.
+ * @param dest Destination vertex.
+ * @return int 0 if successful, -1 otherwise.
+ */
 int scanSrcDest(stringstream &ss, int &src, int &dest)
 {
     if (!(ss >> src >> dest) || src < 0 || dest < 0)
@@ -60,11 +94,21 @@ int scanSrcDest(stringstream &ss, int &src, int &dest)
     return 0;
 }
 
+/**
+ * @brief Handles commands sent by the client.
+ * 
+ * This function processes various commands related to graph operations and MST calculations.
+ * 
+ * @param clientSock The client's socket descriptor.
+ * @param g Unique pointer to the graph object.
+ * @param factory The MSTFactory object for creating MSTs.
+ * @param mst Unique pointer to the MST (Tree) object.
+ */
 void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, unique_ptr<Tree> &mst)
 {
-
     char buffer[1024];
     int bytesReceived;
+
     while (true)
     {
         bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
@@ -129,16 +173,13 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
                 // Attempt to read and parse the edge data
                 if (!(ss >> u >> v >> w))
                 {
-                    // Clear the stringstream and read new input from the socket
                     ss.clear();
                     ss.str("");
                     memset(buffer, 0, sizeof(buffer));
                     bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
 
-                    // Check if we received valid data
                     if (bytesReceived <= 0)
                     {
-                        // Decrement the client number as we're losing a client
                         clientNumber.store(clientNumber.load(memory_order_acquire) - 1, memory_order_release);
                         if (bytesReceived == 0)
                         {
@@ -148,31 +189,25 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
                         }
                         else
                         {
-
                             cerr << "recv error: " << strerror(errno) << endl;
                             break;
                         }
                     }
 
-                    // Load the new input into the stringstream
-                    {
-                        ss.write(buffer, bytesReceived);
+                    ss.write(buffer, bytesReceived);
 
-                        // Attempt to parse again with the new data
-                        if (!(ss >> u >> v >> w))
-                        {
-                            sendResponse(clientSock, "Invalid input format. Please enter 3 integers for u, v, and w.\n");
-                            i--; // Retry this iteration since we didn't get valid input
-                            continue;
-                        }
+                    if (!(ss >> u >> v >> w))
+                    {
+                        sendResponse(clientSock, "Invalid input format. Please enter 3 integers for u, v, and w.\n");
+                        i--;
+                        continue;
                     }
                 }
 
-                // Validate the edge values (u, v, w)
                 if (u < 0 || u > n || v < 0 || v > n || w < 0)
                 {
                     sendResponse(clientSock, "Invalid edge values. Vertices should be in the range [1, n] and weight should be non-negative.\n");
-                    i--; // Retry this iteration since the input was invalid
+                    i--;
                     continue;
                 }
 
@@ -180,7 +215,6 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
             }
             response = "Graph created with " + to_string(n) + " vertices and " + to_string(m) + " edges.\n";
         }
-
         else if (cmd == "Prim")
         {
             unique_lock<mutex> guard(graphMutex, try_to_lock);
@@ -194,7 +228,6 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
             if (g == nullptr || g->getAdj().empty())
             {
                 cerr << "Graph not initialized" << endl;
-
                 continue;
             }
             if (mst != nullptr)
@@ -204,11 +237,8 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
             }
 
             factory.setStrategy(new PrimStrategy());
-
             mst = factory.createMST(g);
-
             response = "MST created using Prim's algorithm.\n";
-
             response += mst->printMST();
         }
         else if (cmd == "Kruskal")
@@ -232,13 +262,10 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
             }
 
             factory.setStrategy(new KruskalStrategy());
-
             mst = factory.createMST(g);
-
             response = "MST created using Kruskal's algorithm.\n";
             response += mst->printMST();
         }
-
         else if (cmd == "MSTweight")
         {
             unique_lock<mutex> mstGuard(graphMutex);
@@ -248,10 +275,8 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
                 continue;
             }
             response = "Total weight of the MST is: ";
-
             response += to_string(mst->totalWeight()) + "\n";
         }
-
         else if (cmd == "Shortestpath")
         {
             unique_lock<mutex> mstGuard(graphMutex);
@@ -262,8 +287,7 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
             }
 
             int src, dest;
-            int res;
-            res = scanSrcDest(ss, src, dest);
+            int res = scanSrcDest(ss, src, dest);
 
             if (res == -1)
                 continue;
@@ -279,7 +303,6 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
                 continue;
             }
             response = "The longest path (diameter) of the MST is: ";
-
             response += to_string(mst->diameter()) + '\n';
         }
         else if (cmd == "Averdist")
@@ -315,6 +338,18 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
     close(clientSock);
 }
 
+/**
+ * @brief Accepts incoming connections and assigns them to a thread in the pool.
+ * 
+ * This function handles the process of accepting new client connections, creating a
+ * handler for the connection, and assigning the handler to a thread in the thread pool.
+ * 
+ * @param server_sock The server's socket descriptor.
+ * @param g Unique pointer to the graph object.
+ * @param factory The MSTFactory object for creating MSTs.
+ * @param mst Unique pointer to the MST (Tree) object.
+ * @param pool Unique pointer to the thread pool.
+ */
 void acceptConnection(int server_sock, unique_ptr<Graph> &g, MSTFactory &factory, unique_ptr<Tree> &mst, unique_ptr<LFThreadPool> &pool)
 {
     {
@@ -338,7 +373,6 @@ void acceptConnection(int server_sock, unique_ptr<Graph> &g, MSTFactory &factory
         cout << "New connection from " << s << " on socket " << client_sock << endl;
         cout << "Currently " << clientNumber << " clients connected" << endl;
     }
-    // Create new event handler for handling the commands and add it to the reactor
     function<void()> commandHandler = [client_sock, &g, &factory, &mst]()
     {
         handleCommands(client_sock, g, factory, mst);
@@ -350,6 +384,14 @@ void acceptConnection(int server_sock, unique_ptr<Graph> &g, MSTFactory &factory
     }
 }
 
+/**
+ * @brief Main function to start the MST server.
+ * 
+ * This function sets up the server, initializes the reactor and thread pool,
+ * and handles incoming connections.
+ * 
+ * @return int Returns 0 on successful execution.
+ */
 int main()
 {
     signal(SIGINT, signalHandler);
@@ -358,7 +400,6 @@ int main()
     unique_ptr<Tree> t;
     MSTFactory factory;
     unique_ptr<LFThreadPool> pool;
-    // The server socket
     int serverSock;
 
     signalHandlerLambda = [&](int signum)
@@ -376,37 +417,31 @@ int main()
     };
 
     struct sockaddr_in serverAddr;
-    // The opt variable is used to set the socket options
     int opt = 1;
 
-    // If the server socket cannot be created, the program will exit
     if ((serverSock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
     {
         cerr << "Socket creation error" << endl;
         exit(1);
     }
 
-    // If the cannot set the socket to reuse the address, the program will exit
     if (setsockopt(serverSock, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)))
     {
         cerr << "Setsockopt error" << endl;
         exit(1);
     }
 
-    // Set the server address
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = INADDR_ANY;
     serverAddr.sin_port = htons(port);
     memset(&(serverAddr.sin_zero), '\0', 8);
 
-    // If the server cannot bind to the address, the program will exit
     if (bind(serverSock, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0)
     {
         cerr << "Bind error" << endl;
         exit(1);
     }
 
-    // If the server cannot listen for incoming connections, the program will exit
     if (listen(serverSock, 10) < 0)
     {
         cerr << "Listen error" << endl;
@@ -419,11 +454,9 @@ int main()
         cout << "Server socket: " << serverSock << endl;
     }
 
-    // Add the acceptConnection function to the reactor as a lambda function
     pool = make_unique<LFThreadPool>(10, *reactor);
     reactor->addHandle(serverSock, [serverSock, &g, &factory, &t, &pool]()
                        { acceptConnection(serverSock, g, factory, t, pool); });
-    // Allow the threads in the pool to run without the finishing the server
     {
         unique_lock<mutex> guard(coutLock);
         cout << "Server running on thread: " << this_thread::get_id() << endl;
