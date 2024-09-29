@@ -354,7 +354,7 @@ void acceptConnection(int server_sock, unique_ptr<Graph> &g, MSTFactory &factory
 {
     {
         unique_lock<mutex> guard(coutLock);
-        cout << "Accepting connection on thread: " << this_thread::get_id() << endl;
+        cout << "[Server] Accepting connection on thread: " << this_thread::get_id() << endl;
     }
 
     struct sockaddr_in client_addr;
