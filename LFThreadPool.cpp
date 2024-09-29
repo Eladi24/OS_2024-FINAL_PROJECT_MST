@@ -124,7 +124,7 @@ void LFThreadPool::join()
         pthread_t id = follower->getId();
         {
             unique_lock<mutex> guard(_outputMx);
-            cout << " [INFO] Joining thread: " << id << endl;
+            cout << "[INFO] Joining thread: " << id << endl;
         }
         // Cancel the thread and join it
         follower->cancel();

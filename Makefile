@@ -63,7 +63,6 @@ pipeline_gcov: PipelineServer
 	clear
 	gcov -b PipelineServer.cpp
 	lcov --capture --directory . --output-file pipeline-coverage.info
-
 lf_gcov: LFServer
 	clear
 	gcov -b LFServer.cpp
