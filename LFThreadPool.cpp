@@ -13,7 +13,7 @@ LFThreadPool::LFThreadPool(size_t numThreads, Reactor& reactor)
         _followers[i]->createThread(bind(&LFThreadPool::followerLoop, this, i));
         {
             unique_lock<mutex> guard(_outputMx);
-            cout << "Following thread created: " << _followers[i]->getId() << endl;
+            cout << "[INFO] Following thread created: " << _followers[i]->getId() << endl;
         }
     }
     // Promote the initial leader
@@ -24,7 +24,7 @@ LFThreadPool::~LFThreadPool()
 {
     {
         unique_lock<mutex> guard(_outputMx);
-        cout << "LFThreadPool destructor" << endl;
+        cout << "[INFO] LFThreadPool destructor" << endl;
     }
     
     stopPool();
@@ -40,7 +40,7 @@ void LFThreadPool::promoteNewLeader()
     {
         {
             unique_lock<mutex> guard(_outputMx);
-            cout << "Promoting new leader: " << _followers.begin()->get()->getId() << endl;
+            cout << "[INFO] Promoting new leader: " << _followers.begin()->get()->getId() << endl;
         }
         _leader = *_followers.begin();
         // Wake up the new leader to handle events
@@ -55,7 +55,7 @@ void LFThreadPool::promoteNewLeader()
         {
             {
                 unique_lock<mutex> guard(_outputMx);
-                cout << "Promoting new leader: " << follower->getId() << endl;
+                cout << "[INFO] Promoting new leader: " << follower->getId() << endl;
             }
             _leader = follower;
             // Wake up the new leader to handle events
@@ -74,7 +74,7 @@ void LFThreadPool::followerLoop(int id)
         _followers[id]->conditionWait(_stop);
         {
             unique_lock<mutex> guard(_outputMx);
-            cout << "Thread: " << _followers[id]->getId() << " woke up" << endl;
+            cout << "[INFO] Thread: " << _followers[id]->getId() << " woke up" << endl;
         }
         
         // If stop then the program is shutting down
@@ -92,7 +92,7 @@ void LFThreadPool::followerLoop(int id)
         currThread->executeEvent();
         {
             unique_lock<mutex> guard(_outputMx);
-            cout << "Thread: " << currThread->getId() << " is returning to sleep" << endl;
+            cout << "[INFO] Thread: " << currThread->getId() << " is returning to sleep" << endl;
         }
         // Put the thread to sleep
         currThread->sleep();
@@ -124,7 +124,7 @@ void LFThreadPool::join()
         pthread_t id = follower->getId();
         {
             unique_lock<mutex> guard(_outputMx);
-            cout << "Joining thread: " << id << endl;
+            cout << " [INFO] Joining thread: " << id << endl;
         }
         // Cancel the thread and join it
         follower->cancel();

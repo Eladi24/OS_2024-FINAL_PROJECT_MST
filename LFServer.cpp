@@ -370,8 +370,8 @@ void acceptConnection(int server_sock, unique_ptr<Graph> &g, MSTFactory &factory
     inet_ntop(client_addr.sin_family, &client_addr.sin_addr, s, sizeof s);
     {
         unique_lock<mutex> guard(coutLock);
-        cout << "New connection from " << s << " on socket " << client_sock << endl;
-        cout << "Currently " << clientNumber << " clients connected" << endl;
+        cout << "[Server] New connection from " << s << " on socket " << client_sock << endl;
+        cout << "[Server] Currently " << clientNumber << " clients connected" << endl;
     }
     function<void()> commandHandler = [client_sock, &g, &factory, &mst]()
     {
@@ -380,7 +380,7 @@ void acceptConnection(int server_sock, unique_ptr<Graph> &g, MSTFactory &factory
     pool->addFd(client_sock, commandHandler);
     {
         unique_lock<mutex> guard(coutLock);
-        cout << "Client: " << client_sock << " was assigned to thread: " << this_thread::get_id() << endl;
+        cout << "[Server] Client: " << client_sock << " was assigned to thread: " << this_thread::get_id() << endl;
     }
 }
 
@@ -406,7 +406,7 @@ int main()
     {
         {
             unique_lock<mutex> guard(coutLock);
-            cout << "Freeing memory" << endl;
+            cout << "[Server] Freeing memory" << endl;
         }
         close(serverSock);
         reactor.reset();
@@ -421,13 +421,13 @@ int main()
 
     if ((serverSock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
     {
-        cerr << "Socket creation error" << endl;
+        cerr << "[Server] Socket creation error" << endl;
         exit(1);
     }
 
     if (setsockopt(serverSock, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)))
     {
-        cerr << "Setsockopt error" << endl;
+        cerr << "[Server] Setsockopt error" << endl;
         exit(1);
     }
 
@@ -450,8 +450,8 @@ int main()
 
     {
         unique_lock<mutex> guard(coutLock);
-        cout << "MST LF server waiting for requests on port " << port << endl;
-        cout << "Server socket: " << serverSock << endl;
+        cout << "[Server] MST LF server waiting for requests on port " << port << endl;
+        cout << "[Server] Server socket: " << serverSock << endl;
     }
 
     pool = make_unique<LFThreadPool>(10, *reactor);
@@ -459,7 +459,7 @@ int main()
                        { acceptConnection(serverSock, g, factory, t, pool); });
     {
         unique_lock<mutex> guard(coutLock);
-        cout << "Server running on thread: " << this_thread::get_id() << endl;
+        cout << "[Server] Server running on thread: " << this_thread::get_id() << endl;
     }
     while (true)
     {
