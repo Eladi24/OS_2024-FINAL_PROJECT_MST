@@ -276,13 +276,20 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
                 cv.notify_one();
             }
         } 
-        else if (cmd == "Prim") 
+        else if (cmd == "Prim" || cmd == "Kruskal")
         {
-            unique_lock<mutex> graphGuard(graphLock);
+            pipeline[1]->enqueue([&]()
+            {
+                unique_lock<mutex> graphGuard(graphLock, try_to_lock);
+            if (!graphGuard.owns_lock()) 
+            {
+                sendResponse(clientSock, "Graph is being used by another thread. Cannot create MST.\n");
+                return;
+            }
             if (g == nullptr || g->getAdj().empty()) 
             {
-                sendResponse(clientSock, "Graph not initialized\n");
-                continue;
+                sendResponse(clientSock, "Graph not initialized.\n");
+                return;
             }
 
             if (mst != nullptr) 
@@ -291,179 +298,73 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
                 mst = nullptr;
             }
 
-            pipeline[1]->enqueue([&g, &factory, &mst]() 
+            if (cmd == "Prim") 
             {
-                unique_lock<mutex> guard(graphLock);
-                factory.setStrategy(new PrimStrategy());
+                factory.setStrategy(new PrimStrategy);
+
+            }
+            else
+            {
+                factory.setStrategy(new KruskalStrategy);
+            }
+            pipeline[2]->enqueue([&]()
+            {
                 mst = factory.createMST(g);
+                {
+                    unique_lock<mutex> graphGuard(graphLock);
+                    unique_lock<mutex> futureGuard(futureLock);
+                    future += "MST created using " + cmd + " algorithm.\n";
+                    future += mst->printMST();
+                    
+                }
+                pipeline[3]->enqueue([&]()
+                {
+                    {
+                        unique_lock<mutex> graphGuard(graphLock);
+                        unique_lock<mutex> futureGuard(futureLock);
+                        future += "TOTAL WEIGHT OF THE MST IS: ";
+                        future += to_string(mst->totalWeight()) + "\n\n";
+                        pipeline[4]->enqueue([&]()
+                        {
+                            {
+                                unique_lock<mutex> graphGuard(graphLock);
+                                unique_lock<mutex> futureGuard(futureLock);
+                                future += "THE LONGEST PATH (DIAMETER) OF THE MST IS: ";
+                                future += to_string(mst->diameter()) + "\n\n";
+                                pipeline[5]->enqueue([&]()
+                                {
+                                    {
+                                        unique_lock<mutex> graphGuard(graphLock);
+                                        unique_lock<mutex> futureGuard(futureLock);
+                                        future += "AVERAGE DISTANCE OF THE MST IS: ";
+                                        future += to_string(mst->averageDistanceEdges()) + "\n\n";
+                                        pipeline[6]->enqueue([&]()
+                                        {
+                                            {
+                                                unique_lock<mutex> graphGuard(graphLock);
+                                                unique_lock<mutex> futureGuard(futureLock);
+                                                future += "SHORTEST PATH BETWEEN TWO VERTICES (1 AND 2 IN THIS EXAMPLE, CHANGE AS NEEDED)\n";
+                                                int src = 1, dest = 2;
+                                                future += "SHORTEST PATH FROM " + to_string(src) + " TO " + to_string(dest) + " IS: ";
+                                                future += mst->shortestPath(src, dest) + "\n";
+                                            }
+                                            {
+                                                unique_lock<mutex> futureGuard(futureLock);
+                                                done.store(true, memory_order_release);
+                                                cv.notify_one();
+                                            }
+                                        });
+                                    }
+                                });
+                            }
+                        });
+                    }
+
+                });
+
             });
-
-            {
-                unique_lock<mutex> futureGuard(futureLock);
-                future = "\nMST created using Prim's algorithm.\n";
-            }
-
-            pipeline[1]->enqueue([&mst, &future, &cv, &done]() 
-            {
-                unique_lock<mutex> guard(graphLock);
-                unique_lock<mutex> futureGuard(futureLock);
-                future += mst->printMST();
-                done.store(true, memory_order_release);
-                cv.notify_one();
             });
-        } 
-        else if (cmd == "Kruskal") 
-        {
-            unique_lock<mutex> graphGuard(graphLock);
-            if (g == nullptr || g->getAdj().empty()) 
-            {
-                sendResponse(clientSock, "Graph not initialized\n");
-                continue;
-            }
-
-            if (mst != nullptr) 
-            {
-                mst.reset();
-                mst = nullptr;
-            }
-
-            pipeline[2]->enqueue([&g, &factory, &mst]() 
-            {
-                unique_lock<mutex> guard(graphLock);
-                factory.setStrategy(new KruskalStrategy());
-                mst = factory.createMST(g);
-            });
-
-            {
-                unique_lock<mutex> futureGuard(futureLock);
-                future = "\nMST created using Kruskal's algorithm.\n";
-            }
-
-            pipeline[2]->enqueue([&mst, &future, &cv, &done]() 
-            {
-                unique_lock<mutex> guard(graphLock);
-                unique_lock<mutex> futureGuard(futureLock);
-                future += mst->printMST();
-                done.store(true, memory_order_release);
-                cv.notify_one();
-            });
-        } 
-        else if (cmd == "MSTweight") 
-        {
-            unique_lock<mutex> graphGuard(graphLock);
-            if (mst == nullptr) 
-            {
-                sendResponse(clientSock, "MST not created\n");
-                continue;
-            }
-
-            {
-                unique_lock<mutex> futureGuard(futureLock);
-                future = "TOTAL WEIGHT OF THE MST IS: ";
-            }
-
-            pipeline[3]->enqueue([&mst, &future, &cv, &done]() 
-            {
-                unique_lock<mutex> guard(graphLock);
-                unique_lock<mutex> futureGuard(futureLock);
-                future += to_string(mst->totalWeight()) + "\n\n";
-                done.store(true, memory_order_release);
-                cv.notify_one();
-            });
-        } 
-        else if (cmd == "Shortestpath") 
-        {
-            unique_lock<mutex> graphGuard(graphLock);
-            if (mst == nullptr) 
-            {
-                sendResponse(clientSock, "MST not created\n");
-                continue;
-            }
-
-            atomic<int> src{-1}, dest{-1};
-            atomic<int> res{0};
-
-            mutex resMutex;
-            condition_variable resCv;
-            bool ready = false;
-
-            pipeline[4]->enqueue([&ss, &src, &dest, &res, &resMutex, &resCv, &ready]() 
-            {
-                res.store(scanSrcDest(ss, src, dest), memory_order_release);
-                unique_lock<mutex> lock(resMutex);
-                ready = true;
-                resCv.notify_one();
-            });
-
-            {
-                unique_lock<mutex> lock(resMutex);
-                resCv.wait(lock, [&ready]() { return ready; });
-            }
-
-            if (res.load(memory_order_acquire) == -1) 
-            {
-                sendResponse(clientSock, "Invalid source or destination\n");
-                continue;
-            }
-
-            {
-                unique_lock<mutex> futureGuard(futureLock);
-                future = "SHORTEST PATH FROM " + to_string(src.load()) + " TO " + to_string(dest.load()) + " IS: ";
-            }
-
-            pipeline[4]->enqueue([&mst, &src, &dest, &future, &cv, &done]() 
-            {
-                unique_lock<mutex> guard(graphLock);
-                string shortestPathResult = mst->shortestPath(src.load(), dest.load());
-
-                unique_lock<mutex> futureGuard(futureLock);
-                future += shortestPathResult+ "\n\n";
-                done.store(true, memory_order_release);
-                cv.notify_one();
-            });
-        } 
-        else if (cmd == "Longestpath") 
-        {
-            unique_lock<mutex> graphGuard(graphLock);
-            if (mst == nullptr) 
-            {
-                sendResponse(clientSock, "MST not created\n");
-                continue;
-            }
-
-            {
-                unique_lock<mutex> futureGuard(futureLock);
-                future = "THE LONGEST PATH (DIAMETER) OF THE MST IS: ";
-            }
-
-            pipeline[5]->enqueue([&mst, &future, &cv, &done]() 
-            {
-                unique_lock<mutex> guard(graphLock);
-                int diameter = mst->diameter();
-                unique_lock<mutex> futureGuard(futureLock);
-                future += to_string(diameter) + "\n\n";
-                done.store(true, memory_order_release);
-                cv.notify_one();
-            });
-        } 
-        else if (cmd == "Averdist") 
-        {
-            unique_lock<mutex> graphGuard(graphLock);
-            if (mst == nullptr) 
-            {
-                sendResponse(clientSock, "MST not created\n");
-                continue;
-            }
-
-            pipeline[6]->enqueue([&mst, &future, &cv, &done]() 
-            {
-                unique_lock<mutex> guard(graphLock);
-                unique_lock<mutex> futureGuard(futureLock);
-                future += "AVEREGE DISTANCE: " +to_string(mst->averageDistanceEdges()) + "\n\n";
-                done.store(true, memory_order_release);
-                cv.notify_one();
-            });
-        } 
+        }
         else if (cmd == "Exit") 
         {
             sendResponse(clientSock, "Goodbye\n");
