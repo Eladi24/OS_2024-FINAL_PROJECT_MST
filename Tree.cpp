@@ -82,27 +82,40 @@ void Tree::dfs(int node, int parent, vector<int> &dist, vector<int> &parentTrack
     }
 }
 
-string Tree::shortestPath(int u, int v)
+string Tree::shortestPath()
 {
-    if (u == v)
+    // Initialize minimum weight as maximum possible integer value
+    int minWeight = INT_MAX;
+    int u = -1, v = -1;
+
+    // Find the edge with the least weight
+    for (int i = 0; i < V; i++)
     {
-        return to_string(u) + " -> " + to_string(v) + " (0)\n";  // Trivial path to self
-    }
-    if (u > V || v > V)
-    {
-        return "Invalid vertices\n";
+        for (Edge e : adj[i])
+        {
+            if (e.weight < minWeight)
+            {
+                minWeight = e.weight;
+                u = e.src;
+                v = e.dest;
+            }
+        }
     }
 
+    // If no valid edge was found, return no path
+    if (u == -1 || v == -1)
+    {
+        return "No path found\n";
+    }
+
+    // Use the existing Dijkstra algorithm to find the shortest path between u and v
     vector<int> parentTrack(V, -1);
     vector<int> dist = dijkstra(u, parentTrack);
 
-    if (dist[v - 1] == INT_MAX)
-    {
-        return "No path\n";  // No path exists
-    }
-
-    return reconstructPath(u, v, parentTrack, dist[v - 1]);  // Pass distance to include in the output
+    // Return the reconstructed path
+    return reconstructPath(u, v, parentTrack, dist[v - 1]);
 }
+
 
 string Tree::reconstructPath(int src, int dest, const vector<int> &parentTrack, int totalWeight)
 {

@@ -127,17 +127,17 @@ class Tree : public Graph
          */
         int diameter();
 
-        /**
-         * @brief Finds the shortest path between two vertices in the tree.
-         * 
-         * This function uses Dijkstra's algorithm to find the shortest path between two
-         * vertices in the tree and returns a formatted string representing the path and its total weight.
-         * 
-         * @param u The source vertex.
-         * @param v The destination vertex.
-         * @return string A formatted string representing the shortest path and its total weight.
-         */
-        string shortestPath(int u, int v);
+  /**
+ * @brief Finds the shortest path based on the least weighted edge in the tree.
+ * 
+ * This function automatically finds the least weighted edge in the tree and returns 
+ * a formatted string representing the path between the two vertices connected by the 
+ * least weighted edge and its total weight.
+ * 
+ * @return string A formatted string representing the shortest path and its total weight.
+ */
+string shortestPath();
+
 
         /**
          * @brief Reconstructs the shortest path from source to destination.

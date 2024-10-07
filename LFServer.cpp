@@ -256,8 +256,8 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
     response += "Average distance of the MST is: " + to_string(mst->averageDistanceEdges()) + "\n";
 
     // Example for Shortest path between two vertices (1 and 2 in this example, change as needed)
-    int src = 1, dest = 2;  // You can customize this, or get input from client
-    response += "Shortest path from " + to_string(src) + " to " + to_string(dest) + " is: " + mst->shortestPath(src, dest) + "\n";
+    
+    response += "Shortest path from  is: " + mst->shortestPath() + "\n";
 }
 
         else if (cmd == "Exit")

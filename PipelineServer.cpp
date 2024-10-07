@@ -343,10 +343,9 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
                                             {
                                                 unique_lock<mutex> graphGuard(graphLock);
                                                 unique_lock<mutex> futureGuard(futureLock);
-                                                future += "SHORTEST PATH BETWEEN TWO VERTICES (1 AND 2 IN THIS EXAMPLE, CHANGE AS NEEDED)\n";
-                                                int src = 1, dest = 2;
-                                                future += "SHORTEST PATH FROM " + to_string(src) + " TO " + to_string(dest) + " IS: ";
-                                                future += mst->shortestPath(src, dest) + "\n";
+
+                                                future += "SHORTEST IS: ";
+                                                future += mst->shortestPath() + "\n";
                                             }
                                             {
                                                 unique_lock<mutex> futureGuard(futureLock);
