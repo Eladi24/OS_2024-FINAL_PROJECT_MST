@@ -536,7 +536,7 @@ int main()
     unique_ptr<Tree> mst;
     vector<pthread_t> clientThreads;
     unique_ptr<functArgs> faPtr;
-
+    
     signalHandlerLambda = [&](int signum)
     {
         for (auto &thread : clientThreads)

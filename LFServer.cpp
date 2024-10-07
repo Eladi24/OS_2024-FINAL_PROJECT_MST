@@ -215,108 +215,51 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
             }
             response = "Graph created with " + to_string(n) + " vertices and " + to_string(m) + " edges.\n";
         }
-        else if (cmd == "Prim")
-        {
-            unique_lock<mutex> guard(graphMutex, try_to_lock);
-            if (!guard.owns_lock())
-            {
-                response = "Graph is being used by another thread can't search for MST prim.\n";
-                sendResponse(clientSock, response);
-                continue;
-            }
+        else if (cmd == "Prim" || cmd == "Kruskal")
+{
+    unique_lock<mutex> guard(graphMutex, try_to_lock);
+    if (!guard.owns_lock())
+    {
+        response = "Graph is being used by another thread can't search for MST using " + cmd + ".\n";
+        sendResponse(clientSock, response);
+        continue;
+    }
 
-            if (g == nullptr || g->getAdj().empty())
-            {
-                cerr << "Graph not initialized" << endl;
-                continue;
-            }
-            if (mst != nullptr)
-            {
-                mst.reset();
-                mst = nullptr;
-            }
+    if (g == nullptr || g->getAdj().empty())
+    {
+        cerr << "Graph not initialized" << endl;
+        continue;
+    }
 
-            factory.setStrategy(new PrimStrategy());
-            mst = factory.createMST(g);
-            response = "MST created using Prim's algorithm.\n";
-            response += mst->printMST();
-        }
-        else if (cmd == "Kruskal")
-        {
-            unique_lock<mutex> guard(graphMutex, try_to_lock);
-            if (!guard.owns_lock())
-            {
-                response = "Graph is being used by another thread can't search for MST Kruskal.\n";
-                sendResponse(clientSock, response);
-                continue;
-            }
-            if (g == nullptr || g->getAdj().empty())
-            {
-                cerr << "Graph not initialized" << endl;
-                continue;
-            }
-            if (mst != nullptr)
-            {
-                mst.reset();
-                mst = nullptr;
-            }
+    if (mst != nullptr)
+    {
+        mst.reset();
+        mst = nullptr;
+    }
 
-            factory.setStrategy(new KruskalStrategy());
-            mst = factory.createMST(g);
-            response = "MST created using Kruskal's algorithm.\n";
-            response += mst->printMST();
-        }
-        else if (cmd == "MSTweight")
-        {
-            unique_lock<mutex> mstGuard(graphMutex);
-            if (mst == nullptr)
-            {
-                sendResponse(clientSock, "MST not created\n");
-                continue;
-            }
-            response = "Total weight of the MST is: ";
-            response += to_string(mst->totalWeight()) + "\n";
-        }
-        else if (cmd == "Shortestpath")
-        {
-            unique_lock<mutex> mstGuard(graphMutex);
-            if (mst == nullptr)
-            {
-                sendResponse(clientSock, "MST not created\n");
-                continue;
-            }
+    if (cmd == "Prim")
+    {
+        factory.setStrategy(new PrimStrategy());
+    }
+    else
+    {
+        factory.setStrategy(new KruskalStrategy());
+    }
 
-            int src, dest;
-            int res = scanSrcDest(ss, src, dest);
+    mst = factory.createMST(g);
+    response = "MST created using " + cmd + " algorithm.\n";
+    response += mst->printMST();
 
-            if (res == -1)
-                continue;
-            response = "Shortest path from " + to_string(src) + " to " + to_string(dest) + " is: ";
-            response += mst->shortestPath(src, dest);
-        }
-        else if (cmd == "Longestpath")
-        {
-            unique_lock<mutex> mstGuard(graphMutex);
-            if (mst == nullptr)
-            {
-                cerr << "MST not created" << endl;
-                continue;
-            }
-            response = "The longest path (diameter) of the MST is: ";
-            response += to_string(mst->diameter()) + '\n';
-        }
-        else if (cmd == "Averdist")
-        {
-            unique_lock<mutex> mstGuard(graphMutex);
-            if (mst == nullptr)
-            {
-                sendResponse(clientSock, "MST not created\n");
-                continue;
-            }
+    // Automatically append results for MSTweight, Longestpath, and Averdist
+    response += "Total weight of the MST is: " + to_string(mst->totalWeight()) + "\n";
+    response += "The longest path (diameter) of the MST is: " + to_string(mst->diameter()) + '\n';
+    response += "Average distance of the MST is: " + to_string(mst->averageDistanceEdges()) + "\n";
 
-            response = "Average distance of the MST is: ";
-            response += to_string(mst->averageDistanceEdges()) + "\n";
-        }
+    // Example for Shortest path between two vertices (1 and 2 in this example, change as needed)
+    int src = 1, dest = 2;  // You can customize this, or get input from client
+    response += "Shortest path from " + to_string(src) + " to " + to_string(dest) + " is: " + mst->shortestPath(src, dest) + "\n";
+}
+
         else if (cmd == "Exit")
         {
             sendResponse(clientSock, "Goodbye\n");
