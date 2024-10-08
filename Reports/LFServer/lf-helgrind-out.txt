@@ -1,151 +1,151 @@
-==89732== Helgrind, a thread error detector
-==89732== Copyright (C) 2007-2017, and GNU GPL'd, by OpenWorks LLP et al.
-==89732== Using Valgrind-3.18.1-42b08ed5bd-20211015 and LibVEX; rerun with -h for copyright info
-==89732== Command: ./LFServer
-==89732== Parent PID: 89730
-==89732== 
---89732-- 
---89732-- Valgrind options:
---89732--    --tool=helgrind
---89732--    --error-exitcode=99
---89732--    --verbose
---89732--    --log-file=lf-helgrind-out.txt
---89732-- Contents of /proc/version:
---89732--   Linux version 5.15.146.1-microsoft-standard-WSL2 (root@65c757a075e2) (gcc (GCC) 11.2.0, GNU ld (GNU Binutils) 2.37) #1 SMP Thu Jan 11 04:09:03 UTC 2024
---89732-- 
---89732-- Arch and hwcaps: AMD64, LittleEndian, amd64-cx16-lzcnt-rdtscp-sse3-ssse3-avx-avx2-bmi-f16c-rdrand-rdseed
---89732-- Page sizes: currently 4096, max supported 4096
---89732-- Valgrind library directory: /usr/libexec/valgrind
-==89732== helgrind --delta-stacktrace=yes only works with --vex-guest-chase=no
-==89732== => (re-setting it to 'no')
---89732-- Reading syms from /home/eladubuntu/Git Projects/OS_2024-FINAL_PROJECT_MST/LFServer
---89732-- Reading syms from /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
---89732--   Considering /usr/lib/debug/.build-id/41/86944c50f8a32b47d74931e3f512b811813b64.debug ..
---89732--   .. build-id is valid
---89732-- Reading syms from /usr/libexec/valgrind/helgrind-amd64-linux
---89732--    object doesn't have a symbol table
---89732--    object doesn't have a dynamic symbol table
---89732-- Scheduler: using generic scheduler lock implementation.
---89732-- Reading suppressions file: /usr/libexec/valgrind/default.supp
-==89732== embedded gdbserver: reading from /tmp/vgdb-pipe-from-vgdb-to-89732-by-eladubuntu-on-???
-==89732== embedded gdbserver: writing to   /tmp/vgdb-pipe-to-vgdb-from-89732-by-eladubuntu-on-???
-==89732== embedded gdbserver: shared mem   /tmp/vgdb-pipe-shared-mem-vgdb-89732-by-eladubuntu-on-???
-==89732== 
-==89732== TO CONTROL THIS PROCESS USING vgdb (which you probably
-==89732== don't want to do, unless you know exactly what you're doing,
-==89732== or are doing some strange experiment):
-==89732==   /usr/bin/vgdb --pid=89732 ...command...
-==89732== 
-==89732== TO DEBUG THIS PROCESS USING GDB: start GDB like this
-==89732==   /path/to/gdb ./LFServer
-==89732== and then give GDB the following command
-==89732==   target remote | /usr/bin/vgdb --pid=89732
-==89732== --pid is optional if only one valgrind process is running
-==89732== 
---89732-- Reading syms from /usr/libexec/valgrind/vgpreload_core-amd64-linux.so
---89732--    object doesn't have a symbol table
---89732-- Reading syms from /usr/libexec/valgrind/vgpreload_helgrind-amd64-linux.so
---89732--    object doesn't have a symbol table
---89732-- REDIR: 0x4027220 (ld-linux-x86-64.so.2:strcmp) redirected to 0x4856720 (strcmp)
---89732-- REDIR: 0x402aa40 (ld-linux-x86-64.so.2:strlen) redirected to 0x4855c20 (strlen)
---89732-- REDIR: 0x402afa0 (ld-linux-x86-64.so.2:mempcpy) redirected to 0x48598f0 (mempcpy)
---89732-- Reading syms from /home/eladubuntu/Git Projects/OS_2024-FINAL_PROJECT_MST/libTree.so
---89732-- Reading syms from /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.30
---89732--    object doesn't have a symbol table
---89732-- Reading syms from /usr/lib/x86_64-linux-gnu/libgcc_s.so.1
---89732--    object doesn't have a symbol table
---89732-- Reading syms from /usr/lib/x86_64-linux-gnu/libc.so.6
---89732--   Considering /usr/lib/debug/.build-id/49/0fef8403240c91833978d494d39e537409b92e.debug ..
---89732--   .. build-id is valid
-==89732== WARNING: new redirection conflicts with existing -- ignoring it
---89732--     old: 0x04bbddf0 (pthread_spin_init@@G) W-> (0000.0) 0x048551d0 pthread_spin_unlock
---89732--     new: 0x04bbddf0 (pthread_spin_init@@G) W-> (0000.0) 0x048551c0 pthread_spin_init
-==89732== WARNING: new redirection conflicts with existing -- ignoring it
---89732--     old: 0x04bbddf0 (pthread_spin_init@@G) W-> (0000.0) 0x048551d0 pthread_spin_unlock
---89732--     new: 0x04bbddf0 (pthread_spin_init@@G) W-> (0000.0) 0x048551c0 pthread_spin_init
-==89732== WARNING: new redirection conflicts with existing -- ignoring it
---89732--     old: 0x04bbe470 (sem_post@@GLIBC_2.34) W-> (0000.0) 0x048552d0 sem_post@*
---89732--     new: 0x04bbe470 (sem_post@@GLIBC_2.34) W-> (0000.0) 0x048552c0 sem_post
-==89732== WARNING: new redirection conflicts with existing -- ignoring it
---89732--     old: 0x04bbecc0 (sem_wait@@GLIBC_2.34) W-> (0000.0) 0x048552b0 sem_wait@*
---89732--     new: 0x04bbecc0 (sem_wait@@GLIBC_2.34) W-> (0000.0) 0x048552a0 sem_wait
-==89732== WARNING: new redirection conflicts with existing -- ignoring it
---89732--     old: 0x04bc7c60 (memalign            ) R-> (1011.0) 0x04850100 memalign
---89732--     new: 0x04bc7c60 (memalign            ) R-> (1017.0) 0x048500d0 aligned_alloc
-==89732== WARNING: new redirection conflicts with existing -- ignoring it
---89732--     old: 0x04bc7c60 (memalign            ) R-> (1011.0) 0x04850100 memalign
---89732--     new: 0x04bc7c60 (memalign            ) R-> (1017.0) 0x048500a0 aligned_alloc
-==89732== WARNING: new redirection conflicts with existing -- ignoring it
---89732--     old: 0x04bc7c60 (memalign            ) R-> (1011.0) 0x04850100 memalign
---89732--     new: 0x04bc7c60 (memalign            ) R-> (1017.0) 0x048500d0 aligned_alloc
-==89732== WARNING: new redirection conflicts with existing -- ignoring it
---89732--     old: 0x04bc7c60 (memalign            ) R-> (1011.0) 0x04850100 memalign
---89732--     new: 0x04bc7c60 (memalign            ) R-> (1017.0) 0x048500a0 aligned_alloc
---89732-- Reading syms from /usr/lib/x86_64-linux-gnu/libm.so.6
---89732--   Considering /usr/lib/debug/.build-id/a5/08ec5d8bf12fb7fd08204e0f87518e5cd0b102.debug ..
---89732--   .. build-id is valid
---89732-- REDIR: 0x4bca720 (libc.so.6:strnlen) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bca9e0 (libc.so.6:strpbrk) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bca2e0 (libc.so.6:strcmp) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4be8cd0 (libc.so.6:wcsnlen) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bcb6d0 (libc.so.6:memset) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4be7540 (libc.so.6:wcslen) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bcbc10 (libc.so.6:memcpy@@GLIBC_2.14) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4be7370 (libc.so.6:wcschr) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bca260 (libc.so.6:index) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bca960 (libc.so.6:rindex) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bcb5a0 (libc.so.6:memmove) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
-==89732== Preferring higher priority redirection:
---89732--     old: 0x04cc27c0 (__memcpy_avx_unalign) R-> (2018.0) 0x048578a0 __memcpy_avx_unaligned_erms
---89732--     new: 0x04cc27c0 (__memcpy_avx_unalign) R-> (2018.1) 0x04858bb0 memmove
---89732-- REDIR: 0x4be73f0 (libc.so.6:wcscmp) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bcb9e0 (libc.so.6:stpncpy) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4be79b0 (libc.so.6:wmemchr) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bca830 (libc.so.6:strncmp) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bcba70 (libc.so.6:strcasecmp) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bca420 (libc.so.6:strcspn) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4be7470 (libc.so.6:wcscpy) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bca1d0 (libc.so.6:strcat) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bcbb60 (libc.so.6:strncasecmp_l) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bcb480 (libc.so.6:bcmp) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bd3570 (libc.so.6:memrchr) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bcd010 (libc.so.6:strchrnul) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bca390 (libc.so.6:strcpy) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bcbb10 (libc.so.6:strcasecmp_l) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bca6a0 (libc.so.6:strlen) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bca8d0 (libc.so.6:strncpy) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bcb950 (libc.so.6:stpcpy) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bcb3f0 (libc.so.6:memchr) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bcab00 (libc.so.6:strspn) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bcb7d0 (libc.so.6:mempcpy) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bcbac0 (libc.so.6:strncasecmp) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4bccf80 (libc.so.6:rawmemchr) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
---89732-- REDIR: 0x4cbf610 (libc.so.6:__strrchr_avx2) redirected to 0x48557c0 (rindex)
---89732-- REDIR: 0x4bc70a0 (libc.so.6:malloc) redirected to 0x484a8a0 (malloc)
---89732-- REDIR: 0x4cbf7e0 (libc.so.6:__strlen_avx2) redirected to 0x4855b00 (strlen)
---89732-- REDIR: 0x4cbba80 (libc.so.6:__memcmp_avx2_movbe) redirected to 0x48587e0 (bcmp)
---89732-- REDIR: 0x4984970 (libstdc++.so.6:operator new(unsigned long)) redirected to 0x484b020 (operator new(unsigned long))
---89732-- REDIR: 0x4cc2f80 (libc.so.6:__memset_avx2_unaligned_erms) redirected to 0x4858aa0 (memset)
---89732-- REDIR: 0x4bb9ef0 (libc.so.6:pthread_mutex_lock@@GLIBC_2.2.5) redirected to 0x4854cb0 (pthread_mutex_lock)
---89732-- REDIR: 0x4cc2780 (libc.so.6:__mempcpy_avx_unaligned_erms) redirected to 0x4859770 (mempcpy)
---89732-- REDIR: 0x4bbba70 (libc.so.6:pthread_mutex_unlock@@GLIBC_2.2.5) redirected to 0x4854ce0 (pthread_mutex_unlock)
---89732-- REDIR: 0x4bb6c40 (libc.so.6:pthread_create@@GLIBC_2.34) redirected to 0x4854890 (pthread_create@*)
---89732-- REDIR: 0x4bc8520 (libc.so.6:calloc) redirected to 0x484fa50 (calloc)
---89732-- REDIR: 0x4bb5830 (libc.so.6:pthread_cond_wait@@GLIBC_2.3.2) redirected to 0x4854cf0 (pthread_cond_wait@*)
---89732-- REDIR: 0x4982c20 (libstdc++.so.6:operator delete(void*, unsigned long)) redirected to 0x484db80 (operator delete(void*, unsigned long))
---89732-- REDIR: 0x4bb5220 (libc.so.6:pthread_cond_signal@@GLIBC_2.3.2) redirected to 0x4854d10 (pthread_cond_signal@*)
---89732-- REDIR: 0x4cbf400 (libc.so.6:__strchrnul_avx2) redirected to 0x4859660 (strchrnul)
---89732-- REDIR: 0x4cc0cb0 (libc.so.6:__strcpy_avx2) redirected to 0x4855c50 (strcpy)
---89732-- REDIR: 0x4cc27c0 (libc.so.6:__memcpy_avx_unaligned_erms) redirected to 0x4858bb0 (memmove)
---89732-- REDIR: 0x4bbae50 (libc.so.6:pthread_mutex_trylock@@GLIBC_2.34) redirected to 0x4854cc0 (pthread_mutex_trylock)
---89732-- REDIR: 0x4982c10 (libstdc++.so.6:operator delete(void*)) redirected to 0x484d8c0 (operator delete(void*))
---89732-- REDIR: 0x4bc73e0 (libc.so.6:free) redirected to 0x484d290 (free)
---89732-- REDIR: 0x4bb84b0 (libc.so.6:pthread_join@@GLIBC_2.34) redirected to 0x48548a0 (pthread_join)
---89732-- REDIR: 0x4bb5150 (libc.so.6:pthread_cond_destroy@@GLIBC_2.3.2) redirected to 0x4854d40 (pthread_cond_destroy@*)
---89732-- REDIR: 0x4cbfc30 (libc.so.6:__strcat_avx2) redirected to 0x48559d0 (strcat)
-==89732== 
-==89732== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 379 from 20)
---89732-- 
---89732-- used_suppression:    379 helgrind-glibc2X-005 /usr/libexec/valgrind/default.supp:947
-==89732== 
-==89732== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 379 from 20)
+==5856== Helgrind, a thread error detector
+==5856== Copyright (C) 2007-2017, and GNU GPL'd, by OpenWorks LLP et al.
+==5856== Using Valgrind-3.18.1-42b08ed5bd-20211015 and LibVEX; rerun with -h for copyright info
+==5856== Command: ./LFServer
+==5856== Parent PID: 5854
+==5856== 
+--5856-- 
+--5856-- Valgrind options:
+--5856--    --tool=helgrind
+--5856--    --error-exitcode=99
+--5856--    --verbose
+--5856--    --log-file=lf-helgrind-out.txt
+--5856-- Contents of /proc/version:
+--5856--   Linux version 5.15.146.1-microsoft-standard-WSL2 (root@65c757a075e2) (gcc (GCC) 11.2.0, GNU ld (GNU Binutils) 2.37) #1 SMP Thu Jan 11 04:09:03 UTC 2024
+--5856-- 
+--5856-- Arch and hwcaps: AMD64, LittleEndian, amd64-cx16-lzcnt-rdtscp-sse3-ssse3-avx-avx2-bmi-f16c-rdrand-rdseed
+--5856-- Page sizes: currently 4096, max supported 4096
+--5856-- Valgrind library directory: /usr/libexec/valgrind
+==5856== helgrind --delta-stacktrace=yes only works with --vex-guest-chase=no
+==5856== => (re-setting it to 'no')
+--5856-- Reading syms from /home/eladubuntu/Git Projects/OS_2024-FINAL_PROJECT_MST/LFServer
+--5856-- Reading syms from /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+--5856--   Considering /usr/lib/debug/.build-id/41/86944c50f8a32b47d74931e3f512b811813b64.debug ..
+--5856--   .. build-id is valid
+--5856-- Reading syms from /usr/libexec/valgrind/helgrind-amd64-linux
+--5856--    object doesn't have a symbol table
+--5856--    object doesn't have a dynamic symbol table
+--5856-- Scheduler: using generic scheduler lock implementation.
+--5856-- Reading suppressions file: /usr/libexec/valgrind/default.supp
+==5856== embedded gdbserver: reading from /tmp/vgdb-pipe-from-vgdb-to-5856-by-eladubuntu-on-???
+==5856== embedded gdbserver: writing to   /tmp/vgdb-pipe-to-vgdb-from-5856-by-eladubuntu-on-???
+==5856== embedded gdbserver: shared mem   /tmp/vgdb-pipe-shared-mem-vgdb-5856-by-eladubuntu-on-???
+==5856== 
+==5856== TO CONTROL THIS PROCESS USING vgdb (which you probably
+==5856== don't want to do, unless you know exactly what you're doing,
+==5856== or are doing some strange experiment):
+==5856==   /usr/bin/vgdb --pid=5856 ...command...
+==5856== 
+==5856== TO DEBUG THIS PROCESS USING GDB: start GDB like this
+==5856==   /path/to/gdb ./LFServer
+==5856== and then give GDB the following command
+==5856==   target remote | /usr/bin/vgdb --pid=5856
+==5856== --pid is optional if only one valgrind process is running
+==5856== 
+--5856-- Reading syms from /usr/libexec/valgrind/vgpreload_core-amd64-linux.so
+--5856--    object doesn't have a symbol table
+--5856-- Reading syms from /usr/libexec/valgrind/vgpreload_helgrind-amd64-linux.so
+--5856--    object doesn't have a symbol table
+--5856-- REDIR: 0x4027220 (ld-linux-x86-64.so.2:strcmp) redirected to 0x4856720 (strcmp)
+--5856-- REDIR: 0x402aa40 (ld-linux-x86-64.so.2:strlen) redirected to 0x4855c20 (strlen)
+--5856-- REDIR: 0x402afa0 (ld-linux-x86-64.so.2:mempcpy) redirected to 0x48598f0 (mempcpy)
+--5856-- Reading syms from /home/eladubuntu/Git Projects/OS_2024-FINAL_PROJECT_MST/libTree.so
+--5856-- Reading syms from /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.30
+--5856--    object doesn't have a symbol table
+--5856-- Reading syms from /usr/lib/x86_64-linux-gnu/libgcc_s.so.1
+--5856--    object doesn't have a symbol table
+--5856-- Reading syms from /usr/lib/x86_64-linux-gnu/libc.so.6
+--5856--   Considering /usr/lib/debug/.build-id/49/0fef8403240c91833978d494d39e537409b92e.debug ..
+--5856--   .. build-id is valid
+==5856== WARNING: new redirection conflicts with existing -- ignoring it
+--5856--     old: 0x04bbddf0 (pthread_spin_init@@G) W-> (0000.0) 0x048551d0 pthread_spin_unlock
+--5856--     new: 0x04bbddf0 (pthread_spin_init@@G) W-> (0000.0) 0x048551c0 pthread_spin_init
+==5856== WARNING: new redirection conflicts with existing -- ignoring it
+--5856--     old: 0x04bbddf0 (pthread_spin_init@@G) W-> (0000.0) 0x048551d0 pthread_spin_unlock
+--5856--     new: 0x04bbddf0 (pthread_spin_init@@G) W-> (0000.0) 0x048551c0 pthread_spin_init
+==5856== WARNING: new redirection conflicts with existing -- ignoring it
+--5856--     old: 0x04bbe470 (sem_post@@GLIBC_2.34) W-> (0000.0) 0x048552d0 sem_post@*
+--5856--     new: 0x04bbe470 (sem_post@@GLIBC_2.34) W-> (0000.0) 0x048552c0 sem_post
+==5856== WARNING: new redirection conflicts with existing -- ignoring it
+--5856--     old: 0x04bbecc0 (sem_wait@@GLIBC_2.34) W-> (0000.0) 0x048552b0 sem_wait@*
+--5856--     new: 0x04bbecc0 (sem_wait@@GLIBC_2.34) W-> (0000.0) 0x048552a0 sem_wait
+==5856== WARNING: new redirection conflicts with existing -- ignoring it
+--5856--     old: 0x04bc7c60 (memalign            ) R-> (1011.0) 0x04850100 memalign
+--5856--     new: 0x04bc7c60 (memalign            ) R-> (1017.0) 0x048500d0 aligned_alloc
+==5856== WARNING: new redirection conflicts with existing -- ignoring it
+--5856--     old: 0x04bc7c60 (memalign            ) R-> (1011.0) 0x04850100 memalign
+--5856--     new: 0x04bc7c60 (memalign            ) R-> (1017.0) 0x048500a0 aligned_alloc
+==5856== WARNING: new redirection conflicts with existing -- ignoring it
+--5856--     old: 0x04bc7c60 (memalign            ) R-> (1011.0) 0x04850100 memalign
+--5856--     new: 0x04bc7c60 (memalign            ) R-> (1017.0) 0x048500d0 aligned_alloc
+==5856== WARNING: new redirection conflicts with existing -- ignoring it
+--5856--     old: 0x04bc7c60 (memalign            ) R-> (1011.0) 0x04850100 memalign
+--5856--     new: 0x04bc7c60 (memalign            ) R-> (1017.0) 0x048500a0 aligned_alloc
+--5856-- Reading syms from /usr/lib/x86_64-linux-gnu/libm.so.6
+--5856--   Considering /usr/lib/debug/.build-id/a5/08ec5d8bf12fb7fd08204e0f87518e5cd0b102.debug ..
+--5856--   .. build-id is valid
+--5856-- REDIR: 0x4bca720 (libc.so.6:strnlen) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bca9e0 (libc.so.6:strpbrk) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bca2e0 (libc.so.6:strcmp) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4be8cd0 (libc.so.6:wcsnlen) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bcb6d0 (libc.so.6:memset) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4be7540 (libc.so.6:wcslen) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bcbc10 (libc.so.6:memcpy@@GLIBC_2.14) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4be7370 (libc.so.6:wcschr) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bca260 (libc.so.6:index) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bca960 (libc.so.6:rindex) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bcb5a0 (libc.so.6:memmove) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+==5856== Preferring higher priority redirection:
+--5856--     old: 0x04cc27c0 (__memcpy_avx_unalign) R-> (2018.0) 0x048578a0 __memcpy_avx_unaligned_erms
+--5856--     new: 0x04cc27c0 (__memcpy_avx_unalign) R-> (2018.1) 0x04858bb0 memmove
+--5856-- REDIR: 0x4be73f0 (libc.so.6:wcscmp) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bcb9e0 (libc.so.6:stpncpy) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4be79b0 (libc.so.6:wmemchr) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bca830 (libc.so.6:strncmp) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bcba70 (libc.so.6:strcasecmp) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bca420 (libc.so.6:strcspn) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4be7470 (libc.so.6:wcscpy) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bca1d0 (libc.so.6:strcat) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bcbb60 (libc.so.6:strncasecmp_l) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bcb480 (libc.so.6:bcmp) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bd3570 (libc.so.6:memrchr) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bcd010 (libc.so.6:strchrnul) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bca390 (libc.so.6:strcpy) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bcbb10 (libc.so.6:strcasecmp_l) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bca6a0 (libc.so.6:strlen) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bca8d0 (libc.so.6:strncpy) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bcb950 (libc.so.6:stpcpy) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bcb3f0 (libc.so.6:memchr) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bcab00 (libc.so.6:strspn) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bcb7d0 (libc.so.6:mempcpy) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bcbac0 (libc.so.6:strncasecmp) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4bccf80 (libc.so.6:rawmemchr) redirected to 0x483f220 (_vgnU_ifunc_wrapper)
+--5856-- REDIR: 0x4cbf610 (libc.so.6:__strrchr_avx2) redirected to 0x48557c0 (rindex)
+--5856-- REDIR: 0x4bc70a0 (libc.so.6:malloc) redirected to 0x484a8a0 (malloc)
+--5856-- REDIR: 0x4cbf7e0 (libc.so.6:__strlen_avx2) redirected to 0x4855b00 (strlen)
+--5856-- REDIR: 0x4cbba80 (libc.so.6:__memcmp_avx2_movbe) redirected to 0x48587e0 (bcmp)
+--5856-- REDIR: 0x4984970 (libstdc++.so.6:operator new(unsigned long)) redirected to 0x484b020 (operator new(unsigned long))
+--5856-- REDIR: 0x4cc2f80 (libc.so.6:__memset_avx2_unaligned_erms) redirected to 0x4858aa0 (memset)
+--5856-- REDIR: 0x4bb9ef0 (libc.so.6:pthread_mutex_lock@@GLIBC_2.2.5) redirected to 0x4854cb0 (pthread_mutex_lock)
+--5856-- REDIR: 0x4cc2780 (libc.so.6:__mempcpy_avx_unaligned_erms) redirected to 0x4859770 (mempcpy)
+--5856-- REDIR: 0x4bbba70 (libc.so.6:pthread_mutex_unlock@@GLIBC_2.2.5) redirected to 0x4854ce0 (pthread_mutex_unlock)
+--5856-- REDIR: 0x4bb6c40 (libc.so.6:pthread_create@@GLIBC_2.34) redirected to 0x4854890 (pthread_create@*)
+--5856-- REDIR: 0x4bc8520 (libc.so.6:calloc) redirected to 0x484fa50 (calloc)
+--5856-- REDIR: 0x4bb5830 (libc.so.6:pthread_cond_wait@@GLIBC_2.3.2) redirected to 0x4854cf0 (pthread_cond_wait@*)
+--5856-- REDIR: 0x4982c20 (libstdc++.so.6:operator delete(void*, unsigned long)) redirected to 0x484db80 (operator delete(void*, unsigned long))
+--5856-- REDIR: 0x4bb5220 (libc.so.6:pthread_cond_signal@@GLIBC_2.3.2) redirected to 0x4854d10 (pthread_cond_signal@*)
+--5856-- REDIR: 0x4cbf400 (libc.so.6:__strchrnul_avx2) redirected to 0x4859660 (strchrnul)
+--5856-- REDIR: 0x4cc0cb0 (libc.so.6:__strcpy_avx2) redirected to 0x4855c50 (strcpy)
+--5856-- REDIR: 0x4cc27c0 (libc.so.6:__memcpy_avx_unaligned_erms) redirected to 0x4858bb0 (memmove)
+--5856-- REDIR: 0x4bbae50 (libc.so.6:pthread_mutex_trylock@@GLIBC_2.34) redirected to 0x4854cc0 (pthread_mutex_trylock)
+--5856-- REDIR: 0x4982c10 (libstdc++.so.6:operator delete(void*)) redirected to 0x484d8c0 (operator delete(void*))
+--5856-- REDIR: 0x4bc73e0 (libc.so.6:free) redirected to 0x484d290 (free)
+--5856-- REDIR: 0x4bb84b0 (libc.so.6:pthread_join@@GLIBC_2.34) redirected to 0x48548a0 (pthread_join)
+--5856-- REDIR: 0x4bb5150 (libc.so.6:pthread_cond_destroy@@GLIBC_2.3.2) redirected to 0x4854d40 (pthread_cond_destroy@*)
+--5856-- REDIR: 0x4cbfc30 (libc.so.6:__strcat_avx2) redirected to 0x48559d0 (strcat)
+==5856== 
+==5856== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 374 from 20)
+--5856-- 
+--5856-- used_suppression:    374 helgrind-glibc2X-005 /usr/libexec/valgrind/default.supp:947
+==5856== 
+==5856== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 374 from 20)

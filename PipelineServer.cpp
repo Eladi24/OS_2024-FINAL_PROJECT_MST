@@ -303,9 +303,14 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
                 factory.setStrategy(new PrimStrategy);
 
             }
-            else
+            else if (cmd == "Kruskal")
             {
                 factory.setStrategy(new KruskalStrategy);
+            }
+            else 
+            {
+                sendResponse(clientSock, "Invalid command: " + cmd + "\n");
+                return;
             }
             pipeline[2]->enqueue([&]()
             {

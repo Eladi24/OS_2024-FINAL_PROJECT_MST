@@ -241,9 +241,15 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
     {
         factory.setStrategy(new PrimStrategy());
     }
-    else
+    else if (cmd == "Kruskal")
     {
         factory.setStrategy(new KruskalStrategy());
+    }
+
+    else
+    {
+        sendResponse(clientSock, "Invalid command: " + cmd + "\n");
+        continue;
     }
 
     mst = factory.createMST(g);
@@ -254,11 +260,73 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
     response += "Total weight of the MST is: " + to_string(mst->totalWeight()) + "\n";
     response += "The longest path (diameter) of the MST is: " + to_string(mst->diameter()) + '\n';
     response += "Average distance of the MST is: " + to_string(mst->averageDistanceEdges()) + "\n";
-
-    // Example for Shortest path between two vertices (1 and 2 in this example, change as needed)
-    
+    // Append the shortest path
     response += "Shortest path from  is: " + mst->shortestPath() + "\n";
 }
+    else if (cmd == "Addedge")
+    {
+        unique_lock<mutex> guard(graphMutex, try_to_lock);
+        if (!guard.owns_lock())
+        {
+            response = "Graph is being used by another thread can't add edge.\n";
+            sendResponse(clientSock, response);
+            continue;
+        }
+
+        if (g == nullptr || g->getAdj().empty())
+        {
+            response = "Graph not initialized.\n";
+            sendResponse(clientSock, response);
+            continue;
+        }
+
+        int u = 0, v = 0, w = 0;
+        ss >> u >> v >> w;
+        if (u < 0 || u > g->getVerticesNumber() || v < 0 || v > g->getVerticesNumber() || w < 0)
+        {
+            response = "Invalid edge values. Vertices should be in the range [1, n] and weight should be non-negative.\n";
+        }
+        else
+        {
+            g->addEdge(u, v, w);
+            response = "Edge added between " + to_string(u) + " and " + to_string(v) + " with weight " + to_string(w) + "\n";
+        }
+    }
+
+    else if (cmd == "Removeedge")
+    {
+        unique_lock<mutex> guard(graphMutex, try_to_lock);
+        if (!guard.owns_lock())
+        {
+            response = "Graph is being used by another thread can't remove edge.\n";
+            sendResponse(clientSock, response);
+            continue;
+        }
+
+        if (g == nullptr || g->getAdj().empty())
+        {
+            response = "Graph not initialized.\n";
+            sendResponse(clientSock, response);
+            continue;
+        }
+
+        int u = 0, v = 0;
+        ss >> u >> v;
+        if (u < 0 || u > g->getVerticesNumber() || v < 0 || v > g->getVerticesNumber())
+        {
+            response = "Invalid edge values. Vertices should be in the range [1, n].\n";
+        }
+        else
+        {
+            if (!g->removeEdge(u, v))
+            {
+                response = "Edge not found between " + to_string(u) + " and " + to_string(v) + "\n";
+            }
+            else
+            {
+                response = "Edge removed between " + to_string(u) + " and " + to_string(v) + "\n";
+        }   }
+    }
 
         else if (cmd == "Exit")
         {
