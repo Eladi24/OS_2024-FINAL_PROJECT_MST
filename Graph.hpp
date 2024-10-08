@@ -73,18 +73,6 @@ class Graph {
          */
         virtual void addEdge(int u, int v, int w);
 
-        /*
-            * @brief Removes an edge from the graph.
-            * 
-            * This function removes an edge with a given source and destination from 
-            * the graph's adjacency list.
-            * 
-            * @param u Source vertex of the edge
-            * @param v Destination vertex of the edge
-            
-        */
-        bool removeEdge(int u, int v);
-
         /**
          * @brief Returns the number of vertices in the graph.
          * 
