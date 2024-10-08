@@ -73,6 +73,8 @@ class Graph {
          */
         virtual void addEdge(int u, int v, int w);
 
+        bool removeEdge(int u, int v);
+
         /**
          * @brief Returns the number of vertices in the graph.
          * 

@@ -264,7 +264,7 @@ response += "AVERAGE DISTANCE OF THE MST IS: " + to_string(mst->averageDistanceE
 response += "SHORTEST PATH IS: " + mst->shortestPath() + "\n";
 
 }
-    else if (cmd == "Addedge")
+    else if (cmd == "AddEdge")
     {
         unique_lock<mutex> guard(graphMutex, try_to_lock);
         if (!guard.owns_lock())
@@ -294,7 +294,7 @@ response += "SHORTEST PATH IS: " + mst->shortestPath() + "\n";
         }
     }
 
-    else if (cmd == "Removeedge")
+    else if (cmd == "RemoveEdge")
     {
         unique_lock<mutex> guard(graphMutex, try_to_lock);
         if (!guard.owns_lock())
