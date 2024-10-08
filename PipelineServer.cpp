@@ -275,7 +275,54 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
                 done.store(true, memory_order_release);
                 cv.notify_one();
             }
-        } 
+        }
+         else if (cmd == "AddEdge") 
+        {
+            int u = 0, v = 0, w = 0;
+            if (!(ss >> u >> v >> w)) 
+            {
+                sendResponse(clientSock, "Invalid ADD_EDGE input. Please provide integers for u, v, and w.\n");
+                continue;
+            }
+
+            pipeline[1]->enqueue([&g, u, v, w]() 
+            {
+                unique_lock<mutex> graphGuard(graphLock);
+                g->addEdge(u, v, w);
+            });
+
+            unique_lock<mutex> futureGuard(futureLock);
+            future = "Edge added between vertices " + to_string(u) + " and " + to_string(v) + " with weight " + to_string(w) + ".\n";
+            done.store(true, memory_order_release);
+            cv.notify_one();
+        }
+        // Adding REMOVE_EDGE command handling
+        else if (cmd == "RemoveEdge") 
+        {
+            int u = 0, v = 0;
+            if (!(ss >> u >> v)) 
+            {
+                sendResponse(clientSock, "Invalid REMOVE_EDGE input. Please provide integers for u and v.\n");
+                continue;
+            }
+
+            pipeline[1]->enqueue([&g, u, v]() 
+            {
+                unique_lock<mutex> graphGuard(graphLock);
+                bool success = g->removeEdge(u, v);
+                if (!success) 
+                {
+                    unique_lock<mutex> coutGuard(coutLock);
+                    cerr << "Error removing edge between " << u << " and " << v << "\n";
+                }
+            });
+
+            unique_lock<mutex> futureGuard(futureLock);
+            future = "Edge removed between vertices " + to_string(u) + " and " + to_string(v) + ".\n";
+            done.store(true, memory_order_release);
+            cv.notify_one();
+        }
+         
         else if (cmd == "Prim" || cmd == "Kruskal")
         {
             pipeline[1]->enqueue([&]()
@@ -349,7 +396,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
                                                 unique_lock<mutex> graphGuard(graphLock);
                                                 unique_lock<mutex> futureGuard(futureLock);
 
-                                                future += "SHORTEST IS: ";
+                                                future += "SHORTEST PATH IS: ";
                                                 future += mst->shortestPath() + "\n";
                                             }
                                             {
