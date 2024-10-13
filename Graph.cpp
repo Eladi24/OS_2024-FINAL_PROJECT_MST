@@ -1,25 +1,25 @@
 
 #include "Graph.hpp"
 
-void Graph::addEdge(int u, int v, int w)
+bool Graph::addEdge(int u, int v, int w)
 {   
     // Check if vertices are valid
-    if (u < 1 || v < 1 || u > V || v > V) {
-        std::cerr << "Error: One or both vertices are invalid." << std::endl;
-        return;
+    if (u < 1 || v < 1 || u > V || v > V || u == v) {
+        return false;
     }
     
     // Check if the edge already exists
     for (const auto& edge : adj[u - 1]) {
         if (edge.dest == v) {
-            std::cerr << "Error: Edge between " << u << " and " << v << " already exists." << std::endl;
-            return;
+           
+            return false;
         }
     }
     
     // Add edge if it doesn't exist
     adj[u - 1].push_back({u, v, w});
     adj[v - 1].push_back({v, u, w});
+    return true;
 }
 
 bool Graph::removeEdge(int u, int v)
@@ -27,6 +27,11 @@ bool Graph::removeEdge(int u, int v)
     // Get the initial size of the adjacency lists
     size_t initialSizeU = adj[u - 1].size();
     size_t initialSizeV = adj[v - 1].size();
+
+    if (u < 1 || v < 1 || u > V || v > V || u == v)
+    {
+        return false;
+    }
 
     // Remove the edge (u, v) from the adjacency list of vertex u
     adj[u - 1].erase(remove_if(adj[u - 1].begin(), adj[u - 1].end(), [v](const Edge &e)

@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-09-15 12:49:02</td>
+            <td class="headerValue">2024-10-11 14:22:45</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">2</td>
@@ -62,20 +62,20 @@
 <pre class="source">
 <a name="1"><span class="lineNum">       1 </span>            : #include &quot;MSTFactory.hpp&quot;</a>
 <a name="2"><span class="lineNum">       2 </span>            : </a>
-<a name="3"><span class="lineNum">       3 </span><span class="lineCov">         12 : void MSTFactory::setStrategy(MSTStrategy* strategy)</span></a>
+<a name="3"><span class="lineNum">       3 </span><span class="lineCov">         24 : void MSTFactory::setStrategy(MSTStrategy* strategy)</span></a>
 <a name="4"><span class="lineNum">       4 </span>            : {</a>
-<a name="5"><span class="lineNum">       5 </span><span class="lineCov">         12 :     if (this-&gt;_strategy != nullptr)</span></a>
+<a name="5"><span class="lineNum">       5 </span><span class="lineCov">         24 :     if (this-&gt;_strategy != nullptr)</span></a>
 <a name="6"><span class="lineNum">       6 </span>            :     {</a>
-<a name="7"><span class="lineNum">       7 </span><span class="lineCov">          9 :         this-&gt;_strategy.reset();</span></a>
+<a name="7"><span class="lineNum">       7 </span><span class="lineCov">         17 :         this-&gt;_strategy.reset();</span></a>
 <a name="8"><span class="lineNum">       8 </span>            :     }</a>
-<a name="9"><span class="lineNum">       9 </span><span class="lineCov">         12 :     this-&gt;_strategy = unique_ptr&lt;MSTStrategy&gt;(strategy);</span></a>
-<a name="10"><span class="lineNum">      10 </span><span class="lineCov">         12 : }</span></a>
+<a name="9"><span class="lineNum">       9 </span><span class="lineCov">         24 :     this-&gt;_strategy = unique_ptr&lt;MSTStrategy&gt;(strategy);</span></a>
+<a name="10"><span class="lineNum">      10 </span><span class="lineCov">         24 : }</span></a>
 <a name="11"><span class="lineNum">      11 </span>            : </a>
-<a name="12"><span class="lineNum">      12 </span><span class="lineCov">         12 : unique_ptr&lt;Tree&gt; MSTFactory::createMST(unique_ptr&lt;Graph&gt;&amp; g)</span></a>
+<a name="12"><span class="lineNum">      12 </span><span class="lineCov">         24 : unique_ptr&lt;Tree&gt; MSTFactory::createMST(unique_ptr&lt;Graph&gt;&amp; g)</span></a>
 <a name="13"><span class="lineNum">      13 </span>            : {</a>
-<a name="14"><span class="lineNum">      14 </span><span class="lineCov">         12 :     vector&lt;Edge&gt; edges = _strategy-&gt;findMST(*g);</span></a>
-<a name="15"><span class="lineNum">      15 </span><span class="lineCov">         24 :     return make_unique&lt;Tree&gt;(edges);</span></a>
-<a name="16"><span class="lineNum">      16 </span><span class="lineCov">         12 : }</span></a>
+<a name="14"><span class="lineNum">      14 </span><span class="lineCov">         24 :     vector&lt;Edge&gt; edges = _strategy-&gt;findMST(*g);</span></a>
+<a name="15"><span class="lineNum">      15 </span><span class="lineCov">         48 :     return make_unique&lt;Tree&gt;(edges);</span></a>
+<a name="16"><span class="lineNum">      16 </span><span class="lineCov">         24 : }</span></a>
 </pre>
       </td>
     </tr>

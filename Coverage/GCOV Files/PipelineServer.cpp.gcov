@@ -1,0 +1,1759 @@
+        -:    0:Source:PipelineServer.cpp
+        -:    0:Graph:PipelineServer.gcno
+        -:    0:Data:PipelineServer.gcda
+        -:    0:Runs:2
+        -:    1:#include <unistd.h>
+        -:    2:#include <netinet/in.h>
+        -:    3:#include <arpa/inet.h>
+        -:    4:#include <sys/socket.h>
+        -:    5:#include <sys/types.h>
+        -:    6:#include <csignal>
+        -:    7:#include <cstring>
+        -:    8:#include <future>
+        -:    9:#include "Graph.hpp"
+        -:   10:#include "Tree.hpp"
+        -:   11:#include "MSTFactory.hpp"
+        -:   12:#include "ActiveObject.hpp"
+        -:   13:
+        -:   14:// Constants
+        -:   15:const int port = 4050; ///< Server port number
+        -:   16:
+        -:   17:// Global variables
+        -:   18:function<void(int)> signalHandlerLambda; ///< Lambda function for handling signals
+        -:   19:atomic<int> clientNumber(0); ///< Tracks the number of connected clients
+        -:   20:mutex graphLock; ///< Mutex for synchronizing access to the graph
+        -:   21:mutex futureLock; ///< Mutex for synchronizing access to shared futures
+        -:   22:mutex &coutLock = ActiveObject::getOutputMutex(); ///< Mutex for synchronizing console output
+        -:   23:
+        -:   24:atomic<bool> terminateFlag(false); ///< Flag to signal the termination of the server
+        -:   25:
+        -:   26:/**
+        -:   27: * @struct functArgs
+        -:   28: * 
+        -:   29: * @brief Holds arguments for thread functions handling client commands.
+        -:   30: * 
+        -:   31: * This struct contains references to the client's socket, the pipeline of ActiveObjects,
+        -:   32: * the graph, the MST factory, and the resulting MST.
+        -:   33: */
+        -:   34:struct functArgs
+        -:   35:{
+        -:   36:    int clientSock; ///< The client's socket descriptor
+        -:   37:    vector<unique_ptr<ActiveObject>> &pipeline; ///< Pipeline of ActiveObjects for task execution
+        -:   38:    unique_ptr<Graph> &g; ///< Reference to the graph object
+        -:   39:    MSTFactory &factory; ///< Reference to the MST factory
+        -:   40:    unique_ptr<Tree> &mst; ///< Reference to the MST (Tree) object
+        -:   41:};
+        -:   42:
+        -:   43:/**
+        -:   44: * @brief Signal handler function.
+        -:   45: * 
+        -:   46: * This function handles interrupt signals (e.g., SIGINT) and performs
+        -:   47: * cleanup operations before exiting the program.
+        -:   48: * 
+        -:   49: * @param signum The signal number.
+        -:   50: */
+function _Z13signalHandleri called 2 returned 0% blocks executed 85%
+        2:   51:void signalHandler(int signum)
+        -:   52:{
+        2:   53:    coutLock.lock();
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:   54:    cout << "Interrupt signal (" << signum << ") received.\n";
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+branch  4 taken 100% (fallthrough)
+branch  5 taken 0% (throw)
+call    6 returned 100%
+branch  7 taken 100% (fallthrough)
+branch  8 taken 0% (throw)
+        2:   55:    coutLock.unlock();
+call    0 returned 100%
+        2:   56:    terminateFlag.store(true);
+call    0 returned 100%
+        2:   57:    unique_lock<mutex> guard(graphLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:   58:    signalHandlerLambda(signum);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:   59:    guard.unlock();
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:   60:    exit(signum);
+call    0 returned 0%
+    =====:   61:}
+call    0 never executed
+        -:   62:
+        -:   63:/**
+        -:   64: * @brief Sends a response to the client.
+        -:   65: * 
+        -:   66: * @param clientSock The client's socket descriptor.
+        -:   67: * @param response The response string to be sent.
+        -:   68: */
+function _Z12sendResponseiRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE called 27 returned 100% blocks executed 46%
+       27:   69:void sendResponse(int clientSock, const string &response)
+        -:   70:{
+       27:   71:    if (send(clientSock, response.c_str(), response.size(), 0) < 0)
+call    0 returned 100%
+call    1 returned 100%
+call    2 returned 100%
+branch  3 taken 0% (fallthrough)
+branch  4 taken 100%
+        -:   72:    {
+    #####:   73:        unique_lock<mutex> guard(coutLock);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:   74:        cerr << "send error" << endl;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:   75:    }
+call    0 never executed
+call    1 never executed
+       27:   76:}
+        -:   77:
+        -:   78:/**
+        -:   79: * @brief Scans the graph input from the client.
+        -:   80: * 
+        -:   81: * @param n Number of vertices.
+        -:   82: * @param m Number of edges.
+        -:   83: * @param ss The stringstream containing the client's input.
+        -:   84: * @param g Unique pointer to the graph object.
+        -:   85: * @return int 0 if successful, -1 otherwise.
+        -:   86: */
+function _Z9scanGraphRiS_RNSt7__cxx1118basic_stringstreamIcSt11char_traitsIcESaIcEEERSt10unique_ptrI5GraphSt14default_deleteIS8_EE called 4 returned 100% blocks executed 91%
+        4:   87:int scanGraph(int &n, int &m, stringstream &ss, unique_ptr<Graph> &g)
+        -:   88:{
+        4:   89:    if (!(ss >> n >> m) || n <= 0 || m < 0)
+call    0 returned 100%
+call    1 returned 100%
+call    2 returned 100%
+branch  3 taken 75% (fallthrough)
+branch  4 taken 25%
+branch  5 taken 67% (fallthrough)
+branch  6 taken 33%
+branch  7 taken 0% (fallthrough)
+branch  8 taken 100%
+branch  9 taken 50% (fallthrough)
+branch 10 taken 50%
+        -:   90:    {
+        2:   91:        unique_lock<mutex> guard(coutLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:   92:        cerr << "Invalid graph input" << endl;
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+branch  4 taken 100% (fallthrough)
+branch  5 taken 0% (throw)
+        2:   93:        return -1;
+        2:   94:    }
+call    0 returned 100%
+call    1 never executed
+        -:   95:
+        2:   96:    g = make_unique<Graph>(n, m);
+call    0 returned 100%
+call    1 returned 100%
+call    2 returned 100%
+        2:   97:    return 0;
+        -:   98:}
+        -:   99:
+        -:  100:/**
+        -:  101: * @brief Handles commands sent by the client.
+        -:  102: * 
+        -:  103: * This function processes various commands related to graph operations and MST calculations.
+        -:  104: * Commands are handled asynchronously using the pipeline of ActiveObjects.
+        -:  105: * 
+        -:  106: * @param clientSock The client's socket descriptor.
+        -:  107: * @param pipeline The pipeline of ActiveObjects for task execution.
+        -:  108: * @param g Unique pointer to the graph object.
+        -:  109: * @param factory The MSTFactory object for creating MSTs.
+        -:  110: * @param mst Unique pointer to the MST (Tree) object.
+        -:  111: */
+function _Z14handleCommandsiRSt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS1_EESaIS4_EERS0_I5GraphS2_IS8_EER10MSTFactoryRS0_I4TreeS2_ISE_EE called 2 returned 100% blocks executed 68%
+        2:  112:void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, unique_ptr<Graph> &g, MSTFactory &factory, unique_ptr<Tree> &mst) 
+        -:  113:{
+        2:  114:    condition_variable cv;
+call    0 returned 100%
+        2:  115:    mutex ssLock;
+        2:  116:    atomic<bool> done(false);
+        2:  117:    char buffer[1024] = {0};
+        -:  118:
+       24:  119:    while (!terminateFlag.load()) 
+call    0 returned 100%
+branch  1 taken 100%
+branch  2 taken 0% (fallthrough)
+        -:  120:    {
+       24:  121:        memset(buffer, 0, sizeof(buffer));
+       24:  122:        int bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+       24:  123:        if (bytesReceived <= 0) 
+branch  0 taken 4% (fallthrough)
+branch  1 taken 96%
+        -:  124:        {
+        1:  125:            clientNumber.store(clientNumber.load(memory_order_acquire) - 1, memory_order_release);
+call    0 returned 100%
+        1:  126:            if (bytesReceived == 0) 
+branch  0 taken 100% (fallthrough)
+branch  1 taken 0%
+        -:  127:            {
+        1:  128:                unique_lock<mutex> guard(coutLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        1:  129:                cout << "Connection closed" << endl;
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+branch  4 taken 100% (fallthrough)
+branch  5 taken 0% (throw)
+        1:  130:                break;
+        1:  131:            } 
+call    0 returned 100%
+call    1 never executed
+        -:  132:            else 
+        -:  133:            {
+    #####:  134:                cerr << "recv error" << endl;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+        -:  135:            }
+        -:  136:        }
+       23:  137:        buffer[bytesReceived] = '\0';
+       23:  138:        string command(buffer);
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0% (throw)
+      23*:  139:        if (command.empty()) continue;
+call    0 returned 100%
+branch  1 taken 0% (fallthrough)
+branch  2 taken 100%
+        -:  140:
+       23:  141:        stringstream ss(command);
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0% (throw)
+       23:  142:        string cmd;
+call    0 returned 100%
+        -:  143:        {
+       23:  144:            unique_lock<mutex> sguard(ssLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+       23:  145:            ss >> cmd;
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+       23:  146:        }
+call    0 returned 100%
+call    1 never executed
+        -:  147:
+       23:  148:        string future;
+call    0 returned 100%
+        -:  149:
+       23:  150:        if (cmd == "Newgraph") 
+call    0 returned 100%
+branch  1 taken 22% (fallthrough)
+branch  2 taken 78%
+        -:  151:        {
+        5:  152:            unique_lock<mutex> graphGuard(graphLock, try_to_lock);
+call    0 returned 100%
+        -:  153:
+        5:  154:            if (!graphGuard.owns_lock()) 
+call    0 returned 100%
+branch  1 taken 20% (fallthrough)
+branch  2 taken 80%
+        -:  155:            {
+        1:  156:                sendResponse(clientSock, "Graph is being used by another thread. Cannot initialize new graph.\n");
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0% (throw)
+call    4 returned 100%
+branch  5 taken 100% (fallthrough)
+branch  6 taken 0% (throw)
+call    7 returned 100%
+call    8 returned 100%
+call    9 never executed
+call   10 never executed
+        1:  157:                continue;
+        -:  158:            }
+        4:  159:            if (g != nullptr) 
+call    0 returned 100%
+branch  1 taken 25% (fallthrough)
+branch  2 taken 75%
+        -:  160:            {
+        1:  161:                g.reset();
+call    0 returned 100%
+        1:  162:                g = nullptr;
+call    0 returned 100%
+        -:  163:            }
+        4:  164:            if (mst != nullptr) 
+call    0 returned 100%
+branch  1 taken 25% (fallthrough)
+branch  2 taken 75%
+        -:  165:            {
+        1:  166:                mst.reset();
+call    0 returned 100%
+        1:  167:                mst = nullptr;
+call    0 returned 100%
+        -:  168:            }
+        -:  169:
+        4:  170:            int n, m, res = 0;
+        4:  171:            mutex initLock;
+        4:  172:            atomic<bool> initDone(false);
+        4:  173:            condition_variable initCV;
+call    0 returned 100%
+        -:  174:
+function _ZZ14handleCommandsiRSt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS1_EESaIS4_EERS0_I5GraphS2_IS8_EER10MSTFactoryRS0_I4TreeS2_ISE_EEENKUlvE_clEv called 4 returned 100% blocks executed 69%
+        4:  175:            pipeline[0]->enqueue([&ss, &n, &m, &g, &ssLock, &initLock, &initDone, &initCV, &res]() 
+call    0 returned 100%
+call    1 returned 100%
+call    2 returned 100%
+branch  3 taken 100% (fallthrough)
+branch  4 taken 0% (throw)
+        -:  176:            {
+        4:  177:                unique_lock<mutex> guard2(ssLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        4:  178:                unique_lock<mutex> guard(initLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        4:  179:                res = scanGraph(n, m, ss, g);     
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        4:  180:                initDone.store(true, memory_order_release);
+call    0 returned 100%
+        4:  181:                initCV.notify_one();
+call    0 returned 100%
+        4:  182:            });
+call    0 returned 100%
+call    1 returned 100%
+call    2 never executed
+call    3 never executed
+        -:  183:
+        -:  184:            {
+        4:  185:                unique_lock<mutex> guard(initLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        8:  186:                while (!initDone) {
+call    0 returned 100%
+branch  1 taken 50%
+branch  2 taken 50% (fallthrough)
+        4:  187:                    initCV.wait(guard);
+call    0 returned 100%
+        -:  188:                }
+        4:  189:            }
+call    0 returned 100%
+        4:  190:            if (res == -1) 
+branch  0 taken 50% (fallthrough)
+branch  1 taken 50%
+        -:  191:            {
+        2:  192:                sendResponse(clientSock, "Invalid graph input. Please enter 2 integers for n and m.\n");
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0% (throw)
+call    4 returned 100%
+branch  5 taken 100% (fallthrough)
+branch  6 taken 0% (throw)
+call    7 returned 100%
+call    8 returned 100%
+call    9 never executed
+call   10 never executed
+        2:  193:                continue;
+        -:  194:            }
+        -:  195:
+       13:  196:            for (int i = 0; i < m; i++) 
+branch  0 taken 92%
+branch  1 taken 8% (fallthrough)
+        -:  197:            {
+       12:  198:                int u = 0, v = 0, w = 0;
+        -:  199:
+        -:  200:                {
+       12:  201:                    unique_lock<mutex> guard(ssLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+       12:  202:                    if (!(ss >> u >> v >> w)) 
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+branch  4 taken 100% (fallthrough)
+branch  5 taken 0% (throw)
+call    6 returned 100%
+branch  7 taken 100% (fallthrough)
+branch  8 taken 0% (throw)
+call    9 returned 100%
+branch 10 taken 100% (fallthrough)
+branch 11 taken 0% (throw)
+branch 12 taken 100% (fallthrough)
+branch 13 taken 0%
+        -:  203:                    {
+       12:  204:                        ss.clear();
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+       12:  205:                        ss.str("");
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0% (throw)
+call    4 returned 100%
+branch  5 taken 100% (fallthrough)
+branch  6 taken 0% (throw)
+call    7 returned 100%
+call    8 returned 100%
+call    9 never executed
+call   10 never executed
+       12:  206:                        memset(buffer, 0, sizeof(buffer));
+       12:  207:                        bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:  208:
+       12:  209:                        if (bytesReceived <= 0) 
+branch  0 taken 8% (fallthrough)
+branch  1 taken 92%
+        -:  210:                        {
+        1:  211:                            clientNumber.store(clientNumber.load(memory_order_acquire) - 1, memory_order_release);
+call    0 returned 100%
+        1:  212:                            if (bytesReceived == 0) 
+branch  0 taken 100% (fallthrough)
+branch  1 taken 0%
+        -:  213:                            {
+        1:  214:                                unique_lock<mutex> coutGuard(coutLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        1:  215:                                cout << "Connection closed by client." << endl;
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+branch  4 taken 100% (fallthrough)
+branch  5 taken 0% (throw)
+        1:  216:                                break;
+        1:  217:                            } 
+call    0 returned 100%
+call    1 never executed
+        -:  218:                            else 
+        -:  219:                            {
+    #####:  220:                                cerr << "recv error: " << strerror(errno) << endl;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+call    4 never executed
+branch  5 never executed
+branch  6 never executed
+call    7 never executed
+branch  8 never executed
+branch  9 never executed
+    #####:  221:                                break;
+        -:  222:                            }
+        -:  223:                        }
+        -:  224:
+       11:  225:                        ss.write(buffer, bytesReceived);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+       11:  226:                        if (!(ss >> u >> v >> w)) 
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+branch  4 taken 100% (fallthrough)
+branch  5 taken 0% (throw)
+call    6 returned 100%
+branch  7 taken 100% (fallthrough)
+branch  8 taken 0% (throw)
+call    9 returned 100%
+branch 10 taken 100% (fallthrough)
+branch 11 taken 0% (throw)
+branch 12 taken 9% (fallthrough)
+branch 13 taken 91%
+        -:  227:                        {
+        1:  228:                            sendResponse(clientSock, "Invalid input format. Please enter 3 integers for u, v, and w.\n");
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0% (throw)
+call    4 returned 100%
+branch  5 taken 100% (fallthrough)
+branch  6 taken 0% (throw)
+call    7 returned 100%
+call    8 returned 100%
+call    9 never executed
+call   10 never executed
+        1:  229:                            i--;
+        1:  230:                            continue;
+        -:  231:                        }
+        -:  232:                    }
+       12:  233:                }
+call    0 returned 100%
+branch  1 taken 83%
+branch  2 taken 8%
+branch  3 taken 8%
+call    4 never executed
+        -:  234:
+       10:  235:                if (u < 0 || u > n || v < 0 || v > n || w < 0 || u == v) 
+branch  0 taken 90%
+branch  1 taken 10%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0%
+branch  4 taken 100% (fallthrough)
+branch  5 taken 0%
+branch  6 taken 100% (fallthrough)
+branch  7 taken 0%
+branch  8 taken 89% (fallthrough)
+branch  9 taken 11%
+branch 10 taken 12% (fallthrough)
+branch 11 taken 88%
+        -:  236:                {
+        3:  237:                    sendResponse(clientSock, "Invalid edge values. Vertices should be in the range [1, n] and weight should be non-negative.\n");
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0% (throw)
+call    4 returned 100%
+branch  5 taken 100% (fallthrough)
+branch  6 taken 0% (throw)
+call    7 returned 100%
+call    8 returned 100%
+call    9 never executed
+call   10 never executed
+        3:  238:                    i--;
+        3:  239:                    continue;
+        -:  240:                }
+        -:  241:
+function _ZZ14handleCommandsiRSt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS1_EESaIS4_EERS0_I5GraphS2_IS8_EER10MSTFactoryRS0_I4TreeS2_ISE_EEENKUlvE0_clEv called 7 returned 100% blocks executed 75%
+        7:  242:                pipeline[0]->enqueue([&g, u, v, w]() 
+call    0 returned 100%
+call    1 returned 100%
+call    2 returned 100%
+branch  3 taken 100% (fallthrough)
+branch  4 taken 0% (throw)
+        -:  243:                {
+        7:  244:                    unique_lock<mutex> guard(graphLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        7:  245:                    g->addEdge(u, v, w);
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0% (throw)
+        7:  246:                });
+call    0 returned 100%
+call    1 never executed
+        -:  247:            }
+        -:  248:
+        -:  249:            {
+        2:  250:                unique_lock<mutex> futureGuard(futureLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  251:                future = "\nGraph created with " + to_string(n) + " vertices and " + to_string(m) + " edges.\n";
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+branch  4 taken 100% (fallthrough)
+branch  5 taken 0% (throw)
+call    6 returned 100%
+branch  7 taken 100% (fallthrough)
+branch  8 taken 0% (throw)
+call    9 returned 100%
+branch 10 taken 100% (fallthrough)
+branch 11 taken 0% (throw)
+call   12 returned 100%
+branch 13 taken 100% (fallthrough)
+branch 14 taken 0% (throw)
+call   15 returned 100%
+branch 16 taken 100% (fallthrough)
+branch 17 taken 0% (throw)
+call   18 returned 100%
+call   19 returned 100%
+call   20 returned 100%
+call   21 returned 100%
+call   22 returned 100%
+call   23 returned 100%
+call   24 returned 100%
+call   25 never executed
+call   26 never executed
+call   27 never executed
+call   28 never executed
+call   29 never executed
+        2:  252:                done.store(true, memory_order_release);
+call    0 returned 100%
+        2:  253:                cv.notify_one();
+call    0 returned 100%
+        2:  254:            }
+call    0 returned 100%
+call    1 never executed
+        7:  255:        }
+call    0 returned 100%
+branch  1 taken 50% (fallthrough)
+branch  2 taken 50%
+call    3 returned 100%
+branch  4 taken 40% (fallthrough)
+branch  5 taken 60%
+call    6 never executed
+call    7 never executed
+       18:  256:         else if (cmd == "AddEdge") 
+call    0 returned 100%
+branch  1 taken 28% (fallthrough)
+branch  2 taken 72%
+        -:  257:        {
+        5:  258:            int u = 0, v = 0, w = 0;
+        5:  259:            if (!(ss >> u >> v >> w)) 
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+branch  4 taken 100% (fallthrough)
+branch  5 taken 0% (throw)
+call    6 returned 100%
+branch  7 taken 100% (fallthrough)
+branch  8 taken 0% (throw)
+call    9 returned 100%
+branch 10 taken 100% (fallthrough)
+branch 11 taken 0% (throw)
+branch 12 taken 20% (fallthrough)
+branch 13 taken 80%
+        -:  260:            {
+        1:  261:                sendResponse(clientSock, "Invalid ADD_EDGE input. Please provide integers for u, v, and w.\n");
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0% (throw)
+call    4 returned 100%
+branch  5 taken 100% (fallthrough)
+branch  6 taken 0% (throw)
+call    7 returned 100%
+call    8 returned 100%
+call    9 never executed
+call   10 never executed
+        1:  262:                continue;
+        -:  263:            }
+        -:  264:
+function _ZZ14handleCommandsiRSt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS1_EESaIS4_EERS0_I5GraphS2_IS8_EER10MSTFactoryRS0_I4TreeS2_ISE_EEENKUlvE1_clEv called 4 returned 100% blocks executed 63%
+        4:  265:            pipeline[0]->enqueue([&g, u, v, w, &future, &done, &cv]() 
+call    0 returned 100%
+call    1 returned 100%
+call    2 returned 100%
+branch  3 taken 100% (fallthrough)
+branch  4 taken 0% (throw)
+        -:  266:            {
+        4:  267:                unique_lock<mutex> graphGuard(graphLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        4:  268:                if (g == nullptr || g->getAdj().empty()) 
+call    0 returned 100%
+branch  1 taken 75% (fallthrough)
+branch  2 taken 25%
+call    3 returned 100%
+call    4 returned 100%
+call    5 returned 100%
+branch  6 taken 0% (fallthrough)
+branch  7 taken 100%
+branch  8 taken 25% (fallthrough)
+branch  9 taken 75%
+        -:  269:                {
+        1:  270:                    unique_lock<mutex> futureGuard(futureLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        1:  271:                    future = "Graph not initialized.\n";
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        1:  272:                    done.store(true, memory_order_release);
+call    0 returned 100%
+        1:  273:                    cv.notify_one();
+call    0 returned 100%
+        1:  274:                    return;
+        1:  275:                }
+call    0 returned 100%
+call    1 never executed
+        3:  276:                bool success = g->addEdge(u, v, w);
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0% (throw)
+        3:  277:                unique_lock<mutex> futureGuard(futureLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        3:  278:                if (!success) 
+branch  0 taken 67% (fallthrough)
+branch  1 taken 33%
+        -:  279:                {
+        2:  280:                    future = "Invalid edge. Vertices should be in the range [1, n] and weight should be non-negative, or edge already exists.\n";
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:  281:                } 
+        -:  282:                else 
+        -:  283:                {
+        1:  284:                    future = "Edge added between vertices " + to_string(u) + " and " + to_string(v) + " with weight " + to_string(w) + ".\n";
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+branch  4 taken 100% (fallthrough)
+branch  5 taken 0% (throw)
+call    6 returned 100%
+branch  7 taken 100% (fallthrough)
+branch  8 taken 0% (throw)
+call    9 returned 100%
+branch 10 taken 100% (fallthrough)
+branch 11 taken 0% (throw)
+call   12 returned 100%
+branch 13 taken 100% (fallthrough)
+branch 14 taken 0% (throw)
+call   15 returned 100%
+branch 16 taken 100% (fallthrough)
+branch 17 taken 0% (throw)
+call   18 returned 100%
+branch 19 taken 100% (fallthrough)
+branch 20 taken 0% (throw)
+call   21 returned 100%
+branch 22 taken 100% (fallthrough)
+branch 23 taken 0% (throw)
+call   24 returned 100%
+branch 25 taken 100% (fallthrough)
+branch 26 taken 0% (throw)
+call   27 returned 100%
+call   28 returned 100%
+call   29 returned 100%
+call   30 returned 100%
+call   31 returned 100%
+call   32 returned 100%
+call   33 returned 100%
+call   34 returned 100%
+call   35 returned 100%
+call   36 returned 100%
+call   37 never executed
+call   38 never executed
+call   39 never executed
+call   40 never executed
+call   41 never executed
+call   42 never executed
+call   43 never executed
+call   44 never executed
+        -:  285:                }
+        3:  286:                done.store(true, memory_order_release);
+call    0 returned 100%
+        3:  287:                cv.notify_one();
+call    0 returned 100%
+        4:  288:            });
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 75% (fallthrough)
+branch  3 taken 25%
+call    4 never executed
+call    5 never executed
+        -:  289:        }
+        -:  290:        // Adding REMOVE_EDGE command handling
+       13:  291:        else if (cmd == "RemoveEdge") 
+call    0 returned 100%
+branch  1 taken 38% (fallthrough)
+branch  2 taken 62%
+        -:  292:        {
+        5:  293:            int u = 0, v = 0;
+        5:  294:            if (!(ss >> u >> v)) 
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+branch  4 taken 100% (fallthrough)
+branch  5 taken 0% (throw)
+call    6 returned 100%
+branch  7 taken 100% (fallthrough)
+branch  8 taken 0% (throw)
+branch  9 taken 20% (fallthrough)
+branch 10 taken 80%
+        -:  295:            {
+        1:  296:                sendResponse(clientSock, "Invalid REMOVE_EDGE input. Please provide integers for u and v.\n");
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0% (throw)
+call    4 returned 100%
+branch  5 taken 100% (fallthrough)
+branch  6 taken 0% (throw)
+call    7 returned 100%
+call    8 returned 100%
+call    9 never executed
+call   10 never executed
+        1:  297:                continue;
+        -:  298:            }
+        -:  299:
+function _ZZ14handleCommandsiRSt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS1_EESaIS4_EERS0_I5GraphS2_IS8_EER10MSTFactoryRS0_I4TreeS2_ISE_EEENKUlvE2_clEv called 4 returned 100% blocks executed 61%
+        4:  300:            pipeline[0]->enqueue([&g, u, v, &future, &done, &cv]() 
+call    0 returned 100%
+call    1 returned 100%
+call    2 returned 100%
+branch  3 taken 100% (fallthrough)
+branch  4 taken 0% (throw)
+        -:  301:            {
+        4:  302:                unique_lock<mutex> graphGuard(graphLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        4:  303:                if (g == nullptr || g->getAdj().empty()) 
+call    0 returned 100%
+branch  1 taken 75% (fallthrough)
+branch  2 taken 25%
+call    3 returned 100%
+call    4 returned 100%
+call    5 returned 100%
+branch  6 taken 0% (fallthrough)
+branch  7 taken 100%
+branch  8 taken 25% (fallthrough)
+branch  9 taken 75%
+        -:  304:                {
+        1:  305:                    unique_lock<mutex> futureGuard(futureLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        1:  306:                    future = "Graph not initialized.\n";
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        1:  307:                    done.store(true, memory_order_release);
+call    0 returned 100%
+        1:  308:                    cv.notify_one();
+call    0 returned 100%
+        1:  309:                    return;
+        1:  310:                }
+call    0 returned 100%
+call    1 never executed
+        3:  311:                bool success = g->removeEdge(u, v);
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0% (throw)
+        3:  312:                unique_lock<mutex> futureGuard(futureLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        3:  313:                if (!success) 
+branch  0 taken 67% (fallthrough)
+branch  1 taken 33%
+        -:  314:                {
+        2:  315:                    future = "Edge between vertices " + to_string(u) + " and " + to_string(v) + " does not exist.\n";
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+branch  4 taken 100% (fallthrough)
+branch  5 taken 0% (throw)
+call    6 returned 100%
+branch  7 taken 100% (fallthrough)
+branch  8 taken 0% (throw)
+call    9 returned 100%
+branch 10 taken 100% (fallthrough)
+branch 11 taken 0% (throw)
+call   12 returned 100%
+branch 13 taken 100% (fallthrough)
+branch 14 taken 0% (throw)
+call   15 returned 100%
+branch 16 taken 100% (fallthrough)
+branch 17 taken 0% (throw)
+call   18 returned 100%
+call   19 returned 100%
+call   20 returned 100%
+call   21 returned 100%
+call   22 returned 100%
+call   23 returned 100%
+call   24 returned 100%
+call   25 never executed
+call   26 never executed
+call   27 never executed
+call   28 never executed
+call   29 never executed
+        -:  316:                } 
+        -:  317:                else 
+        -:  318:                {
+        1:  319:                    future = "Edge removed between vertices " + to_string(u) + " and " + to_string(v) + ".\n";
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+branch  4 taken 100% (fallthrough)
+branch  5 taken 0% (throw)
+call    6 returned 100%
+branch  7 taken 100% (fallthrough)
+branch  8 taken 0% (throw)
+call    9 returned 100%
+branch 10 taken 100% (fallthrough)
+branch 11 taken 0% (throw)
+call   12 returned 100%
+branch 13 taken 100% (fallthrough)
+branch 14 taken 0% (throw)
+call   15 returned 100%
+branch 16 taken 100% (fallthrough)
+branch 17 taken 0% (throw)
+call   18 returned 100%
+call   19 returned 100%
+call   20 returned 100%
+call   21 returned 100%
+call   22 returned 100%
+call   23 returned 100%
+call   24 returned 100%
+call   25 never executed
+call   26 never executed
+call   27 never executed
+call   28 never executed
+call   29 never executed
+        -:  320:                }
+        3:  321:                done.store(true, memory_order_release);
+call    0 returned 100%
+        3:  322:                cv.notify_one();
+call    0 returned 100%
+        4:  323:            });
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 75% (fallthrough)
+branch  3 taken 25%
+call    4 never executed
+call    5 never executed
+        -:  324:            
+        -:  325:        }
+        -:  326:         
+        8:  327:        else if (cmd == "Prim" || cmd == "Kruskal")
+call    0 returned 100%
+branch  1 taken 62% (fallthrough)
+branch  2 taken 38%
+call    3 returned 100%
+branch  4 taken 60% (fallthrough)
+branch  5 taken 40%
+branch  6 taken 75% (fallthrough)
+branch  7 taken 25%
+        -:  328:        {
+function _ZZ14handleCommandsiRSt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS1_EESaIS4_EERS0_I5GraphS2_IS8_EER10MSTFactoryRS0_I4TreeS2_ISE_EEENKUlvE3_clEv called 6 returned 100% blocks executed 65%
+       6*:  329:            pipeline[1]->enqueue([&g, cmd, &factory, &mst, &future, &done, &cv, &pipeline]()
+call    0 returned 100%
+call    1 returned 100%
+call    2 returned 100%
+branch  3 taken 100% (fallthrough)
+branch  4 taken 0% (throw)
+call    5 returned 100%
+branch  6 taken 100% (fallthrough)
+branch  7 taken 0% (throw)
+call    8 returned 100%
+call    9 never executed
+        -:  330:            {
+        6:  331:                unique_lock<mutex> graphGuard(graphLock, try_to_lock);
+call    0 returned 100%
+        6:  332:            if (!graphGuard.owns_lock()) 
+call    0 returned 100%
+branch  1 taken 33% (fallthrough)
+branch  2 taken 67%
+        -:  333:            {
+        2:  334:                unique_lock<mutex> futureGuard(futureLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  335:                future = "Graph is being used by another thread. Cannot search for MST using " + cmd + ".\n";
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+branch  4 taken 100% (fallthrough)
+branch  5 taken 0% (throw)
+call    6 returned 100%
+call    7 returned 100%
+call    8 returned 100%
+call    9 never executed
+        2:  336:                done.store(true, memory_order_release);
+call    0 returned 100%
+        2:  337:                cv.notify_one();
+call    0 returned 100%
+        2:  338:                return;
+        2:  339:            }
+call    0 returned 100%
+call    1 never executed
+        4:  340:            if (g == nullptr || g->getAdj().empty()) 
+call    0 returned 100%
+branch  1 taken 50% (fallthrough)
+branch  2 taken 50%
+call    3 returned 100%
+call    4 returned 100%
+call    5 returned 100%
+branch  6 taken 0% (fallthrough)
+branch  7 taken 100%
+branch  8 taken 50% (fallthrough)
+branch  9 taken 50%
+        -:  341:            {
+        2:  342:                unique_lock<mutex> futureGuard(futureLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  343:                future = "Graph not initialized.\n";
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  344:                done.store(true, memory_order_release);
+call    0 returned 100%
+        2:  345:                cv.notify_one();
+call    0 returned 100%
+        2:  346:                return;
+        2:  347:            }
+call    0 returned 100%
+call    1 never executed
+        -:  348:
+        2:  349:            if (mst != nullptr) 
+call    0 returned 100%
+branch  1 taken 50% (fallthrough)
+branch  2 taken 50%
+        -:  350:            {
+        1:  351:                mst.reset();
+call    0 returned 100%
+        1:  352:                mst = nullptr;
+call    0 returned 100%
+        -:  353:            }
+        -:  354:
+        2:  355:            if (cmd == "Prim") 
+call    0 returned 100%
+branch  1 taken 50% (fallthrough)
+branch  2 taken 50%
+        -:  356:            {
+        1:  357:                factory.setStrategy(new PrimStrategy);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+call    4 returned 100%
+branch  5 taken 100% (fallthrough)
+branch  6 taken 0% (throw)
+        -:  358:
+        -:  359:            }
+        1:  360:            else if (cmd == "Kruskal")
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0%
+        -:  361:            {
+        1:  362:                factory.setStrategy(new KruskalStrategy);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+call    4 returned 100%
+branch  5 taken 100% (fallthrough)
+branch  6 taken 0% (throw)
+        -:  363:            }
+        -:  364:            else 
+        -:  365:            {
+    #####:  366:                unique_lock<mutex> futureGuard(futureLock);
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  367:                future = "Invalid command: " + cmd + "\n";
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+call    6 never executed
+call    7 never executed
+call    8 never executed
+call    9 never executed
+    #####:  368:                done.store(true, memory_order_release);
+call    0 never executed
+    #####:  369:                cv.notify_one();
+call    0 never executed
+    #####:  370:                return;
+    #####:  371:            }
+call    0 never executed
+call    1 never executed
+function _ZZZ14handleCommandsiRSt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS1_EESaIS4_EERS0_I5GraphS2_IS8_EER10MSTFactoryRS0_I4TreeS2_ISE_EEENKUlvE3_clEvENKUlvE_clEv called 2 returned 100% blocks executed 62%
+        2:  372:            pipeline[2]->enqueue([&g, &factory, &mst, &future, &done, &cv, &pipeline, cmd]()
+call    0 returned 100%
+call    1 returned 100%
+call    2 returned 100%
+branch  3 taken 100% (fallthrough)
+branch  4 taken 0% (throw)
+call    5 returned 100%
+branch  6 taken 100% (fallthrough)
+branch  7 taken 0% (throw)
+call    8 returned 100%
+call    9 never executed
+        -:  373:            {
+        2:  374:                mst = factory.createMST(g);
+call    0 returned 100%
+call    1 returned 100%
+call    2 returned 100%
+        -:  375:                {
+        2:  376:                    unique_lock<mutex> graphGuard(graphLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  377:                    unique_lock<mutex> futureGuard(futureLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  378:                    future += "MST created using " + cmd + " algorithm.\n";
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+branch  4 taken 100% (fallthrough)
+branch  5 taken 0% (throw)
+call    6 returned 100%
+branch  7 taken 100% (fallthrough)
+branch  8 taken 0% (throw)
+call    9 returned 100%
+call   10 returned 100%
+call   11 never executed
+call   12 never executed
+        2:  379:                    future += mst->printMST();
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0% (throw)
+call    4 returned 100%
+branch  5 taken 100% (fallthrough)
+branch  6 taken 0% (throw)
+call    7 returned 100%
+call    8 never executed
+        -:  380:                    
+        2:  381:                }
+call    0 returned 100%
+call    1 returned 100%
+call    2 never executed
+call    3 never executed
+function _ZZZZ14handleCommandsiRSt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS1_EESaIS4_EERS0_I5GraphS2_IS8_EER10MSTFactoryRS0_I4TreeS2_ISE_EEENKUlvE3_clEvENKUlvE_clEvENKUlvE_clEv called 2 returned 100% blocks executed 63%
+        2:  382:                pipeline[3]->enqueue([&g, &mst, &future, &done, &cv, &pipeline]()
+call    0 returned 100%
+call    1 returned 100%
+call    2 returned 100%
+        -:  383:                {
+        -:  384:                    {
+        2:  385:                        unique_lock<mutex> graphGuard(graphLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  386:                        unique_lock<mutex> futureGuard(futureLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  387:                        future += "TOTAL WEIGHT OF THE MST IS: ";
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  388:                        future += to_string(mst->totalWeight()) + "\n\n";
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0% (throw)
+call    4 returned 100%
+branch  5 taken 100% (fallthrough)
+branch  6 taken 0% (throw)
+call    7 returned 100%
+branch  8 taken 100% (fallthrough)
+branch  9 taken 0% (throw)
+call   10 returned 100%
+branch 11 taken 100% (fallthrough)
+branch 12 taken 0% (throw)
+call   13 returned 100%
+call   14 returned 100%
+call   15 never executed
+call   16 never executed
+function _ZZZZZ14handleCommandsiRSt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS1_EESaIS4_EERS0_I5GraphS2_IS8_EER10MSTFactoryRS0_I4TreeS2_ISE_EEENKUlvE3_clEvENKUlvE_clEvENKUlvE_clEvENKUlvE_clEv called 2 returned 100% blocks executed 63%
+        2:  389:                        pipeline[4]->enqueue([&g, &mst, &future, &done, &cv, &pipeline]()
+call    0 returned 100%
+call    1 returned 100%
+call    2 returned 100%
+branch  3 taken 100% (fallthrough)
+branch  4 taken 0% (throw)
+        -:  390:                        {
+        -:  391:                            {
+        2:  392:                                unique_lock<mutex> graphGuard(graphLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  393:                                unique_lock<mutex> futureGuard(futureLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  394:                                future += "THE LONGEST PATH (DIAMETER) OF THE MST IS: ";
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  395:                                future += to_string(mst->diameter()) + "\n\n";
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0% (throw)
+call    4 returned 100%
+branch  5 taken 100% (fallthrough)
+branch  6 taken 0% (throw)
+call    7 returned 100%
+branch  8 taken 100% (fallthrough)
+branch  9 taken 0% (throw)
+call   10 returned 100%
+branch 11 taken 100% (fallthrough)
+branch 12 taken 0% (throw)
+call   13 returned 100%
+call   14 returned 100%
+call   15 never executed
+call   16 never executed
+function _ZZZZZZ14handleCommandsiRSt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS1_EESaIS4_EERS0_I5GraphS2_IS8_EER10MSTFactoryRS0_I4TreeS2_ISE_EEENKUlvE3_clEvENKUlvE_clEvENKUlvE_clEvENKUlvE_clEvENKUlvE_clEv called 2 returned 100% blocks executed 63%
+        2:  396:                                pipeline[5]->enqueue([&g, &mst, &future, &done, &cv, &pipeline]()
+call    0 returned 100%
+call    1 returned 100%
+call    2 returned 100%
+branch  3 taken 100% (fallthrough)
+branch  4 taken 0% (throw)
+        -:  397:                                {
+        -:  398:                                    {
+        2:  399:                                        unique_lock<mutex> graphGuard(graphLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  400:                                        unique_lock<mutex> futureGuard(futureLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  401:                                        future += "AVERAGE DISTANCE OF THE MST IS: ";
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  402:                                        future += to_string(mst->averageDistanceEdges()) + "\n\n";
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0% (throw)
+call    4 returned 100%
+branch  5 taken 100% (fallthrough)
+branch  6 taken 0% (throw)
+call    7 returned 100%
+branch  8 taken 100% (fallthrough)
+branch  9 taken 0% (throw)
+call   10 returned 100%
+branch 11 taken 100% (fallthrough)
+branch 12 taken 0% (throw)
+call   13 returned 100%
+call   14 returned 100%
+call   15 never executed
+call   16 never executed
+function _ZZZZZZZ14handleCommandsiRSt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS1_EESaIS4_EERS0_I5GraphS2_IS8_EER10MSTFactoryRS0_I4TreeS2_ISE_EEENKUlvE3_clEvENKUlvE_clEvENKUlvE_clEvENKUlvE_clEvENKUlvE_clEvENKUlvE_clEv called 2 returned 100% blocks executed 61%
+        2:  403:                                        pipeline[6]->enqueue([&g, &mst, &future, &done, &cv, &pipeline]()
+call    0 returned 100%
+call    1 returned 100%
+call    2 returned 100%
+branch  3 taken 100% (fallthrough)
+branch  4 taken 0% (throw)
+        -:  404:                                        {
+        -:  405:                                            {
+        2:  406:                                                unique_lock<mutex> graphGuard(graphLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  407:                                                unique_lock<mutex> futureGuard(futureLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:  408:
+        2:  409:                                                future += "SHORTEST PATH IS: ";
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  410:                                                future += mst->shortestPath() + "\n";
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0% (throw)
+call    4 returned 100%
+branch  5 taken 100% (fallthrough)
+branch  6 taken 0% (throw)
+call    7 returned 100%
+branch  8 taken 100% (fallthrough)
+branch  9 taken 0% (throw)
+call   10 returned 100%
+call   11 returned 100%
+call   12 never executed
+call   13 never executed
+        2:  411:                                            }
+call    0 returned 100%
+call    1 returned 100%
+call    2 never executed
+call    3 never executed
+        -:  412:                                            {
+        2:  413:                                                unique_lock<mutex> futureGuard(futureLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  414:                                                done.store(true, memory_order_release);
+call    0 returned 100%
+        2:  415:                                                cv.notify_one();
+call    0 returned 100%
+        2:  416:                                            }
+call    0 returned 100%
+        2:  417:                                        });
+        2:  418:                                    }
+call    0 returned 100%
+call    1 returned 100%
+call    2 never executed
+call    3 never executed
+        2:  419:                                });
+        2:  420:                            }
+call    0 returned 100%
+call    1 returned 100%
+call    2 never executed
+call    3 never executed
+        2:  421:                        });
+        2:  422:                    }
+call    0 returned 100%
+call    1 returned 100%
+call    2 never executed
+call    3 never executed
+        -:  423:
+        2:  424:                });
+        -:  425:
+        2:  426:            });
+        6:  427:            });
+call    0 returned 100%
+branch  1 taken 33% (fallthrough)
+branch  2 taken 67%
+call    3 never executed
+        -:  428:        }
+        2:  429:        else if (cmd == "Exit") 
+call    0 returned 100%
+branch  1 taken 50% (fallthrough)
+branch  2 taken 50%
+        -:  430:        {
+        1:  431:            sendResponse(clientSock, "Goodbye\n");
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0% (throw)
+call    4 returned 100%
+branch  5 taken 100% (fallthrough)
+branch  6 taken 0% (throw)
+call    7 returned 100%
+call    8 returned 100%
+call    9 returned 100%
+call   10 never executed
+call   11 never executed
+        1:  432:            clientNumber.store(clientNumber.load(memory_order_acquire) - 1, memory_order_release);
+call    0 returned 100%
+        1:  433:            break;
+        -:  434:        } 
+        -:  435:        else 
+        -:  436:        {
+        1:  437:            sendResponse(clientSock, "Invalid command: " + cmd + "\n");
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+branch  4 taken 100% (fallthrough)
+branch  5 taken 0% (throw)
+call    6 returned 100%
+branch  7 taken 100% (fallthrough)
+branch  8 taken 0% (throw)
+call    9 returned 100%
+call   10 returned 100%
+call   11 never executed
+call   12 never executed
+        1:  438:            continue;
+        -:  439:        }
+        -:  440:
+        -:  441:        {
+       16:  442:            unique_lock<mutex> guard(futureLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+       30:  443:            while (!done) {
+call    0 returned 100%
+branch  1 taken 47%
+branch  2 taken 53% (fallthrough)
+       14:  444:                cv.wait(guard);
+call    0 returned 100%
+        -:  445:            }
+       16:  446:            sendResponse(clientSock, future);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+       16:  447:            done.store(false, memory_order_release);
+call    0 returned 100%
+       16:  448:            future.clear();
+call    0 returned 100%
+       16:  449:        }
+call    0 returned 100%
+call    1 never executed
+       44:  450:    }
+call    0 returned 100%
+branch  1 taken 70%
+branch  2 taken 26%
+branch  3 taken 4%
+call    4 returned 100%
+branch  5 taken 70%
+branch  6 taken 26%
+branch  7 taken 4%
+call    8 returned 100%
+branch  9 taken 70%
+branch 10 taken 26%
+branch 11 taken 4%
+call   12 returned 100%
+branch 13 taken 70%
+branch 14 taken 4%
+branch 15 taken 26%
+call   16 never executed
+call   17 never executed
+call   18 never executed
+call   19 never executed
+        -:  451:
+        2:  452:    close(clientSock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  453:}
+call    0 returned 100%
+call    1 never executed
+        -:  454:
+        -:  455:/**
+        -:  456: * @brief Accepts incoming connections and returns the client's socket descriptor.
+        -:  457: * 
+        -:  458: * @param server_sock The server's socket descriptor.
+        -:  459: * @return int The client's socket descriptor, or -1 on error.
+        -:  460: */
+function _Z16acceptConnectioni called 4 returned 50% blocks executed 84%
+        4:  461:int acceptConnection(int server_sock)
+        -:  462:{
+        -:  463:    struct sockaddr_in client_addr;
+        4:  464:    socklen_t sin_size = sizeof(client_addr);
+        4:  465:    int client_sock = accept(server_sock, (struct sockaddr *)&client_addr, &sin_size);
+call    0 returned 50%
+branch  1 taken 50% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  466:    if (client_sock == -1)
+branch  0 taken 0% (fallthrough)
+branch  1 taken 100%
+        -:  467:    {
+    #####:  468:        perror("accept");
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+    #####:  469:        return -1;
+        -:  470:    }
+        2:  471:    clientNumber.store(clientNumber.load(memory_order_acquire) + 1, memory_order_release);
+call    0 returned 100%
+        -:  472:    char s[INET6_ADDRSTRLEN];
+        2:  473:    inet_ntop(client_addr.sin_family, &client_addr.sin_addr, s, sizeof s);
+call    0 returned 100%
+        -:  474:    {
+        2:  475:        unique_lock<mutex> guard(coutLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  476:        cout << "New connection from " << s << " on socket " << client_sock << endl;
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+branch  4 taken 100% (fallthrough)
+branch  5 taken 0% (throw)
+call    6 returned 100%
+branch  7 taken 100% (fallthrough)
+branch  8 taken 0% (throw)
+call    9 returned 100%
+branch 10 taken 100% (fallthrough)
+branch 11 taken 0% (throw)
+call   12 returned 100%
+branch 13 taken 100% (fallthrough)
+branch 14 taken 0% (throw)
+        4:  477:        cout << "Currently " << clientNumber.load(memory_order_acquire) << " clients connected" << endl;
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+call    4 returned 100%
+branch  5 taken 100% (fallthrough)
+branch  6 taken 0% (throw)
+call    7 returned 100%
+branch  8 taken 100% (fallthrough)
+branch  9 taken 0% (throw)
+call   10 returned 100%
+branch 11 taken 100% (fallthrough)
+branch 12 taken 0% (throw)
+        2:  478:    }
+call    0 returned 100%
+call    1 never executed
+        2:  479:    return client_sock;
+        -:  480:}
+        -:  481:
+        -:  482:/**
+        -:  483: * @brief Server main function.
+        -:  484: * 
+        -:  485: * This function initializes the server, sets up signal handling,
+        -:  486: * manages connections using a pipeline of ActiveObjects, and
+        -:  487: * handles commands from clients in a multi-threaded environment.
+        -:  488: * 
+        -:  489: * @return int Returns 0 on successful execution.
+        -:  490: */
+function main called 2 returned 0% blocks executed 54%
+        2:  491:int main()
+        -:  492:{
+        2:  493:    signal(SIGINT, signalHandler);
+call    0 returned 100%
+        2:  494:    vector<thread> threads;
+call    0 returned 100%
+        2:  495:    vector<unique_ptr<ActiveObject>> pipeline;
+call    0 returned 100%
+        2:  496:    unique_ptr<Graph> g;
+        2:  497:    MSTFactory factory;
+        2:  498:    unique_ptr<Tree> mst;
+        2:  499:    vector<pthread_t> clientThreads;
+call    0 returned 100%
+        2:  500:    unique_ptr<functArgs> faPtr;
+        -:  501:    
+function _ZZ4mainENKUliE_clEi called 2 returned 100% blocks executed 100%
+        2:  502:    signalHandlerLambda = [&](int signum)
+        -:  503:    {
+        4:  504:        for (auto &thread : clientThreads)
+call    0 returned 100%
+call    1 returned 100%
+call    2 returned 100%
+call    3 returned 100%
+call    4 returned 100%
+branch  5 taken 50%
+branch  6 taken 50% (fallthrough)
+        -:  505:        {
+        2:  506:            pthread_cancel(thread);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  507:            pthread_join(thread, nullptr);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:  508:        }
+        2:  509:        clientThreads.clear();
+call    0 returned 100%
+        2:  510:        clientThreads.shrink_to_fit();
+call    0 returned 100%
+        2:  511:        faPtr.reset();
+call    0 returned 100%
+        2:  512:        factory.destroyStrategy();
+call    0 returned 100%
+        2:  513:        mst.reset();
+call    0 returned 100%
+        2:  514:        g.reset();
+call    0 returned 100%
+       16:  515:        for (auto &obj : pipeline)
+call    0 returned 100%
+call    1 returned 100%
+call    2 returned 100%
+call    3 returned 100%
+call    4 returned 100%
+branch  5 taken 88%
+branch  6 taken 12% (fallthrough)
+        -:  516:        {
+       14:  517:            obj.reset();
+call    0 returned 100%
+        -:  518:        }
+        2:  519:        pipeline.clear();
+call    0 returned 100%
+        2:  520:        pipeline.shrink_to_fit();
+call    0 returned 100%
+        4:  521:    };
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        -:  522:
+        -:  523:    int serverSock;
+        -:  524:    struct sockaddr_in serverAddr;
+        2:  525:    int opt = 1;
+        -:  526:
+        2:  527:    if ((serverSock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+call    0 returned 100%
+branch  1 taken 0% (fallthrough)
+branch  2 taken 100%
+        -:  528:    {
+    #####:  529:        cerr << "Socket creation error" << endl;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  530:        exit(1);
+call    0 never executed
+        -:  531:    }
+        -:  532:
+        2:  533:    if (setsockopt(serverSock, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)))
+call    0 returned 100%
+branch  1 taken 0% (fallthrough)
+branch  2 taken 100%
+        -:  534:    {
+    #####:  535:        cerr << "Setsockopt error" << endl;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  536:        exit(1);
+call    0 never executed
+        -:  537:    }
+        -:  538:
+        2:  539:    serverAddr.sin_family = AF_INET;
+        2:  540:    serverAddr.sin_addr.s_addr = INADDR_ANY;
+        2:  541:    serverAddr.sin_port = htons(port);
+        2:  542:    memset(&(serverAddr.sin_zero), '\0', 8);
+        -:  543:
+        2:  544:    if (bind(serverSock, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0)
+call    0 returned 100%
+branch  1 taken 0% (fallthrough)
+branch  2 taken 100%
+        -:  545:    {
+    #####:  546:        cerr << "Bind error" << endl;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  547:        exit(1);
+call    0 never executed
+        -:  548:    }
+        -:  549:
+        2:  550:    if (listen(serverSock, 10) < 0)
+call    0 returned 100%
+branch  1 taken 0% (fallthrough)
+branch  2 taken 100%
+        -:  551:    {
+    #####:  552:        cerr << "Listen error" << endl;
+call    0 never executed
+branch  1 never executed
+branch  2 never executed
+call    3 never executed
+branch  4 never executed
+branch  5 never executed
+    #####:  553:        exit(1);
+call    0 never executed
+        -:  554:    }
+        -:  555:
+        -:  556:    {
+        2:  557:        unique_lock<mutex> guard(coutLock);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  558:        cout << "MST pipeline server waiting for requests on port " << port << endl;
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+branch  4 taken 100% (fallthrough)
+branch  5 taken 0% (throw)
+call    6 returned 100%
+branch  7 taken 100% (fallthrough)
+branch  8 taken 0% (throw)
+        2:  559:    }
+call    0 returned 100%
+call    1 never executed
+        -:  560:
+       16:  561:    for (int i = 0; i < 7; i++)
+branch  0 taken 88%
+branch  1 taken 12% (fallthrough)
+        -:  562:    {
+       14:  563:        pipeline.push_back(make_unique<ActiveObject>());
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+branch  4 taken 100% (fallthrough)
+branch  5 taken 0% (throw)
+call    6 returned 100%
+call    7 never executed
+        -:  564:    }
+        -:  565:
+        -:  566:    while (true)
+        -:  567:    {
+        4:  568:        int newClientSock = acceptConnection(serverSock);
+call    0 returned 50%
+branch  1 taken 50% (fallthrough)
+branch  2 taken 0% (throw)
+       2*:  569:        if (newClientSock == -1)
+branch  0 taken 0% (fallthrough)
+branch  1 taken 100%
+        -:  570:        {
+    #####:  571:            continue;
+        -:  572:        }
+        -:  573:
+        2:  574:        faPtr = unique_ptr<functArgs>(new functArgs{newClientSock, ref(pipeline), ref(g), ref(factory), ref(mst)});
+call    0 returned 100%
+call    1 returned 100%
+call    2 returned 100%
+call    3 returned 100%
+call    4 returned 100%
+call    5 returned 100%
+call    6 returned 100%
+call    7 returned 100%
+call    8 returned 100%
+branch  9 taken 100% (fallthrough)
+branch 10 taken 0% (throw)
+call   11 returned 100%
+call   12 returned 100%
+call   13 returned 100%
+        -:  575:        pthread_t tid;
+function _ZZ4mainENKUlPvE0_clES_ called 2 returned 100% blocks executed 100%
+        2:  576:        auto threadFunc = [](void *arg) -> void *
+        -:  577:        {
+        2:  578:            functArgs *fa = static_cast<functArgs *>(arg);
+        2:  579:            handleCommands(fa->clientSock, fa->pipeline, fa->g, fa->factory, fa->mst);
+call    0 returned 100%
+        2:  580:            return nullptr;
+        -:  581:        };
+        2:  582:        pthread_create(&tid, nullptr, threadFunc, faPtr.get());
+call    0 returned 100%
+call    1 returned 100%
+call    2 returned 100%
+        2:  583:        clientThreads.push_back(tid);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+        2:  584:    }
+        -:  585:    close(serverSock);
+        -:  586:
+        -:  587:    return 0;
+    =====:  588:}
+call    0 never executed
+call    1 never executed
+call    2 never executed
+call    3 never executed
+call    4 never executed
+call    5 never executed
+call    6 never executed

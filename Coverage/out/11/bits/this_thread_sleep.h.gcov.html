@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-09-15 12:49:02</td>
+            <td class="headerValue">2024-10-11 14:22:45</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">1</td>
@@ -129,19 +129,19 @@
 <a name="67"><span class="lineNum">      67 </span>            :     /// this_thread::sleep_for</a>
 <a name="68"><span class="lineNum">      68 </span>            :     template&lt;typename _Rep, typename _Period&gt;</a>
 <a name="69"><span class="lineNum">      69 </span>            :       inline void</a>
-<a name="70"><span class="lineNum">      70 </span><span class="lineCov">     224098 :       sleep_for(const chrono::duration&lt;_Rep, _Period&gt;&amp; __rtime)</span></a>
+<a name="70"><span class="lineNum">      70 </span><span class="lineCov">     644847 :       sleep_for(const chrono::duration&lt;_Rep, _Period&gt;&amp; __rtime)</span></a>
 <a name="71"><span class="lineNum">      71 </span>            :       {</a>
-<a name="72"><span class="lineNum">      72 </span><span class="lineCov">     224098 :         if (__rtime &lt;= __rtime.zero())</span></a>
+<a name="72"><span class="lineNum">      72 </span><span class="lineCov">     644847 :         if (__rtime &lt;= __rtime.zero())</span></a>
 <a name="73"><span class="lineNum">      73 </span><span class="lineNoCov">          0 :           return;</span></a>
-<a name="74"><span class="lineNum">      74 </span><span class="lineCov">     224098 :         auto __s = chrono::duration_cast&lt;chrono::seconds&gt;(__rtime);</span></a>
-<a name="75"><span class="lineNum">      75 </span><span class="lineCov">     224098 :         auto __ns = chrono::duration_cast&lt;chrono::nanoseconds&gt;(__rtime - __s);</span></a>
+<a name="74"><span class="lineNum">      74 </span><span class="lineCov">     644847 :         auto __s = chrono::duration_cast&lt;chrono::seconds&gt;(__rtime);</span></a>
+<a name="75"><span class="lineNum">      75 </span><span class="lineCov">     644847 :         auto __ns = chrono::duration_cast&lt;chrono::nanoseconds&gt;(__rtime - __s);</span></a>
 <a name="76"><span class="lineNum">      76 </span>            : #ifdef _GLIBCXX_USE_NANOSLEEP</a>
-<a name="77"><span class="lineNum">      77 </span><span class="lineCov">     448196 :         struct ::timespec __ts =</span></a>
+<a name="77"><span class="lineNum">      77 </span><span class="lineCov">    1289694 :         struct ::timespec __ts =</span></a>
 <a name="78"><span class="lineNum">      78 </span>            :           {</a>
-<a name="79"><span class="lineNum">      79 </span><span class="lineCov">     224098 :             static_cast&lt;std::time_t&gt;(__s.count()),</span></a>
-<a name="80"><span class="lineNum">      80 </span><span class="lineCov">     224098 :             static_cast&lt;long&gt;(__ns.count())</span></a>
+<a name="79"><span class="lineNum">      79 </span><span class="lineCov">     644847 :             static_cast&lt;std::time_t&gt;(__s.count()),</span></a>
+<a name="80"><span class="lineNum">      80 </span><span class="lineCov">     644847 :             static_cast&lt;long&gt;(__ns.count())</span></a>
 <a name="81"><span class="lineNum">      81 </span>            :           };</a>
-<a name="82"><span class="lineNum">      82 </span><span class="lineCov">     224098 :         while (::nanosleep(&amp;__ts, &amp;__ts) == -1 &amp;&amp; errno == EINTR)</span></a>
+<a name="82"><span class="lineNum">      82 </span><span class="lineCov">     644847 :         while (::nanosleep(&amp;__ts, &amp;__ts) == -1 &amp;&amp; errno == EINTR)</span></a>
 <a name="83"><span class="lineNum">      83 </span>            :           { }</a>
 <a name="84"><span class="lineNum">      84 </span>            : #else</a>
 <a name="85"><span class="lineNum">      85 </span>            :         __sleep_for(__s, __ns);</a>

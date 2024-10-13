@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-09-15 12:49:02</td>
+            <td class="headerValue">2024-10-11 14:22:45</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">19</td>
@@ -282,11 +282,11 @@
 <a name="220"><span class="lineNum">     220 </span>            :       {</a>
 <a name="221"><span class="lineNum">     221 </span>            :         template&lt;typename _Rep, typename _Period&gt;</a>
 <a name="222"><span class="lineNum">     222 </span>            :           static constexpr _ToDur</a>
-<a name="223"><span class="lineNum">     223 </span><span class="lineCov">     224098 :           __cast(const duration&lt;_Rep, _Period&gt;&amp; __d)</span></a>
+<a name="223"><span class="lineNum">     223 </span><span class="lineCov">     644847 :           __cast(const duration&lt;_Rep, _Period&gt;&amp; __d)</span></a>
 <a name="224"><span class="lineNum">     224 </span>            :           {</a>
 <a name="225"><span class="lineNum">     225 </span>            :             typedef typename _ToDur::rep                        __to_rep;</a>
-<a name="226"><span class="lineNum">     226 </span><span class="lineCov">     448196 :             return _ToDur(static_cast&lt;__to_rep&gt;(</span></a>
-<a name="227"><span class="lineNum">     227 </span><span class="lineCov">     224098 :               static_cast&lt;_CR&gt;(__d.count()) / static_cast&lt;_CR&gt;(_CF::den)));</span></a>
+<a name="226"><span class="lineNum">     226 </span><span class="lineCov">    1289694 :             return _ToDur(static_cast&lt;__to_rep&gt;(</span></a>
+<a name="227"><span class="lineNum">     227 </span><span class="lineCov">     644847 :               static_cast&lt;_CR&gt;(__d.count()) / static_cast&lt;_CR&gt;(_CF::den)));</span></a>
 <a name="228"><span class="lineNum">     228 </span>            :           }</a>
 <a name="229"><span class="lineNum">     229 </span>            :       };</a>
 <a name="230"><span class="lineNum">     230 </span>            : </a>
@@ -295,11 +295,11 @@
 <a name="233"><span class="lineNum">     233 </span>            :       {</a>
 <a name="234"><span class="lineNum">     234 </span>            :         template&lt;typename _Rep, typename _Period&gt;</a>
 <a name="235"><span class="lineNum">     235 </span>            :           static constexpr _ToDur</a>
-<a name="236"><span class="lineNum">     236 </span><span class="lineCov">     448196 :           __cast(const duration&lt;_Rep, _Period&gt;&amp; __d)</span></a>
+<a name="236"><span class="lineNum">     236 </span><span class="lineCov">    1289694 :           __cast(const duration&lt;_Rep, _Period&gt;&amp; __d)</span></a>
 <a name="237"><span class="lineNum">     237 </span>            :           {</a>
 <a name="238"><span class="lineNum">     238 </span>            :             typedef typename _ToDur::rep                        __to_rep;</a>
-<a name="239"><span class="lineNum">     239 </span><span class="lineCov">     896392 :             return _ToDur(static_cast&lt;__to_rep&gt;(</span></a>
-<a name="240"><span class="lineNum">     240 </span><span class="lineCov">     448196 :               static_cast&lt;_CR&gt;(__d.count()) * static_cast&lt;_CR&gt;(_CF::num)));</span></a>
+<a name="239"><span class="lineNum">     239 </span><span class="lineCov">    2579388 :             return _ToDur(static_cast&lt;__to_rep&gt;(</span></a>
+<a name="240"><span class="lineNum">     240 </span><span class="lineCov">    1289694 :               static_cast&lt;_CR&gt;(__d.count()) * static_cast&lt;_CR&gt;(_CF::num)));</span></a>
 <a name="241"><span class="lineNum">     241 </span>            :           }</a>
 <a name="242"><span class="lineNum">     242 </span>            :       };</a>
 <a name="243"><span class="lineNum">     243 </span>            : </a>
@@ -326,7 +326,7 @@
 <a name="264"><span class="lineNum">     264 </span>            :     /// duration_cast</a>
 <a name="265"><span class="lineNum">     265 </span>            :     template&lt;typename _ToDur, typename _Rep, typename _Period&gt;</a>
 <a name="266"><span class="lineNum">     266 </span>            :       constexpr __enable_if_is_duration&lt;_ToDur&gt;</a>
-<a name="267"><span class="lineNum">     267 </span><span class="lineCov">     672294 :       duration_cast(const duration&lt;_Rep, _Period&gt;&amp; __d)</span></a>
+<a name="267"><span class="lineNum">     267 </span><span class="lineCov">    1934541 :       duration_cast(const duration&lt;_Rep, _Period&gt;&amp; __d)</span></a>
 <a name="268"><span class="lineNum">     268 </span>            :       {</a>
 <a name="269"><span class="lineNum">     269 </span>            :         typedef typename _ToDur::period                         __to_period;</a>
 <a name="270"><span class="lineNum">     270 </span>            :         typedef typename _ToDur::rep                            __to_rep;</a>
@@ -335,7 +335,7 @@
 <a name="273"><span class="lineNum">     273 </span>            :                                                                 __cr;</a>
 <a name="274"><span class="lineNum">     274 </span>            :         typedef  __duration_cast_impl&lt;_ToDur, __cf, __cr,</a>
 <a name="275"><span class="lineNum">     275 </span>            :                                       __cf::num == 1, __cf::den == 1&gt; __dc;</a>
-<a name="276"><span class="lineNum">     276 </span><span class="lineCov">     672294 :         return __dc::__cast(__d);</span></a>
+<a name="276"><span class="lineNum">     276 </span><span class="lineCov">    1934541 :         return __dc::__cast(__d);</span></a>
 <a name="277"><span class="lineNum">     277 </span>            :       }</a>
 <a name="278"><span class="lineNum">     278 </span>            : </a>
 <a name="279"><span class="lineNum">     279 </span>            :     /// treat_as_floating_point</a>
@@ -491,8 +491,8 @@
 <a name="429"><span class="lineNum">     429 </span>            :       struct duration_values</a>
 <a name="430"><span class="lineNum">     430 </span>            :       {</a>
 <a name="431"><span class="lineNum">     431 </span>            :         static constexpr _Rep</a>
-<a name="432"><span class="lineNum">     432 </span><span class="lineCov">     224098 :         zero() noexcept</span></a>
-<a name="433"><span class="lineNum">     433 </span><span class="lineCov">     224098 :         { return _Rep(0); }</span></a>
+<a name="432"><span class="lineNum">     432 </span><span class="lineCov">     644847 :         zero() noexcept</span></a>
+<a name="433"><span class="lineNum">     433 </span><span class="lineCov">     644847 :         { return _Rep(0); }</span></a>
 <a name="434"><span class="lineNum">     434 </span>            : </a>
 <a name="435"><span class="lineNum">     435 </span>            :         static constexpr _Rep</a>
 <a name="436"><span class="lineNum">     436 </span>            :         max() noexcept</a>
@@ -580,24 +580,24 @@
 <a name="518"><span class="lineNum">     518 </span>            :         template&lt;typename _Rep2, typename = _Require&lt;</a>
 <a name="519"><span class="lineNum">     519 </span>            :                  is_convertible&lt;const _Rep2&amp;, rep&gt;,</a>
 <a name="520"><span class="lineNum">     520 </span>            :                  __or_&lt;__is_float&lt;rep&gt;, __not_&lt;__is_float&lt;_Rep2&gt;&gt;&gt;&gt;&gt;</a>
-<a name="521"><span class="lineNum">     521 </span><span class="lineCov">    1344588 :           constexpr explicit duration(const _Rep2&amp; __rep)</span></a>
-<a name="522"><span class="lineNum">     522 </span><span class="lineCov">    1344588 :           : __r(static_cast&lt;rep&gt;(__rep)) { }</span></a>
+<a name="521"><span class="lineNum">     521 </span><span class="lineCov">    3869082 :           constexpr explicit duration(const _Rep2&amp; __rep)</span></a>
+<a name="522"><span class="lineNum">     522 </span><span class="lineCov">    3869082 :           : __r(static_cast&lt;rep&gt;(__rep)) { }</span></a>
 <a name="523"><span class="lineNum">     523 </span>            : </a>
 <a name="524"><span class="lineNum">     524 </span>            :         template&lt;typename _Rep2, typename _Period2, typename = _Require&lt;</a>
 <a name="525"><span class="lineNum">     525 </span>            :                  is_convertible&lt;const _Rep2&amp;, rep&gt;,</a>
 <a name="526"><span class="lineNum">     526 </span>            :                  __or_&lt;__is_float&lt;rep&gt;,</a>
 <a name="527"><span class="lineNum">     527 </span>            :                        __and_&lt;__is_harmonic&lt;_Period2&gt;,</a>
 <a name="528"><span class="lineNum">     528 </span>            :                               __not_&lt;__is_float&lt;_Rep2&gt;&gt;&gt;&gt;&gt;&gt;</a>
-<a name="529"><span class="lineNum">     529 </span><span class="lineCov">     224098 :           constexpr duration(const duration&lt;_Rep2, _Period2&gt;&amp; __d)</span></a>
-<a name="530"><span class="lineNum">     530 </span><span class="lineCov">     224098 :           : __r(duration_cast&lt;duration&gt;(__d).count()) { }</span></a>
+<a name="529"><span class="lineNum">     529 </span><span class="lineCov">     644847 :           constexpr duration(const duration&lt;_Rep2, _Period2&gt;&amp; __d)</span></a>
+<a name="530"><span class="lineNum">     530 </span><span class="lineCov">     644847 :           : __r(duration_cast&lt;duration&gt;(__d).count()) { }</span></a>
 <a name="531"><span class="lineNum">     531 </span>            : </a>
 <a name="532"><span class="lineNum">     532 </span>            :         ~duration() = default;</a>
 <a name="533"><span class="lineNum">     533 </span>            :         duration&amp; operator=(const duration&amp;) = default;</a>
 <a name="534"><span class="lineNum">     534 </span>            : </a>
 <a name="535"><span class="lineNum">     535 </span>            :         // 20.11.5.2 observer</a>
 <a name="536"><span class="lineNum">     536 </span>            :         constexpr rep</a>
-<a name="537"><span class="lineNum">     537 </span><span class="lineCov">    2240980 :         count() const</span></a>
-<a name="538"><span class="lineNum">     538 </span><span class="lineCov">    2240980 :         { return __r; }</span></a>
+<a name="537"><span class="lineNum">     537 </span><span class="lineCov">    6448470 :         count() const</span></a>
+<a name="538"><span class="lineNum">     538 </span><span class="lineCov">    6448470 :         { return __r; }</span></a>
 <a name="539"><span class="lineNum">     539 </span>            : </a>
 <a name="540"><span class="lineNum">     540 </span>            :         // 20.11.5.3 arithmetic</a>
 <a name="541"><span class="lineNum">     541 </span>            : </a>
@@ -682,8 +682,8 @@
 <a name="620"><span class="lineNum">     620 </span>            : </a>
 <a name="621"><span class="lineNum">     621 </span>            :         // 20.11.5.4 special values</a>
 <a name="622"><span class="lineNum">     622 </span>            :         static constexpr duration</a>
-<a name="623"><span class="lineNum">     623 </span><span class="lineCov">     224098 :         zero() noexcept</span></a>
-<a name="624"><span class="lineNum">     624 </span><span class="lineCov">     224098 :         { return duration(duration_values&lt;rep&gt;::zero()); }</span></a>
+<a name="623"><span class="lineNum">     623 </span><span class="lineCov">     644847 :         zero() noexcept</span></a>
+<a name="624"><span class="lineNum">     624 </span><span class="lineCov">     644847 :         { return duration(duration_values&lt;rep&gt;::zero()); }</span></a>
 <a name="625"><span class="lineNum">     625 </span>            : </a>
 <a name="626"><span class="lineNum">     626 </span>            :         static constexpr duration</a>
 <a name="627"><span class="lineNum">     627 </span>            :         min() noexcept</a>
@@ -719,13 +719,13 @@
 <a name="657"><span class="lineNum">     657 </span>            :              typename _Rep2, typename _Period2&gt;</a>
 <a name="658"><span class="lineNum">     658 </span>            :       constexpr typename common_type&lt;duration&lt;_Rep1, _Period1&gt;,</a>
 <a name="659"><span class="lineNum">     659 </span>            :                                      duration&lt;_Rep2, _Period2&gt;&gt;::type</a>
-<a name="660"><span class="lineNum">     660 </span><span class="lineCov">     224098 :       operator-(const duration&lt;_Rep1, _Period1&gt;&amp; __lhs,</span></a>
+<a name="660"><span class="lineNum">     660 </span><span class="lineCov">     644847 :       operator-(const duration&lt;_Rep1, _Period1&gt;&amp; __lhs,</span></a>
 <a name="661"><span class="lineNum">     661 </span>            :                 const duration&lt;_Rep2, _Period2&gt;&amp; __rhs)</a>
 <a name="662"><span class="lineNum">     662 </span>            :       {</a>
 <a name="663"><span class="lineNum">     663 </span>            :         typedef duration&lt;_Rep1, _Period1&gt;                 __dur1;</a>
 <a name="664"><span class="lineNum">     664 </span>            :         typedef duration&lt;_Rep2, _Period2&gt;                 __dur2;</a>
 <a name="665"><span class="lineNum">     665 </span>            :         typedef typename common_type&lt;__dur1,__dur2&gt;::type __cd;</a>
-<a name="666"><span class="lineNum">     666 </span><span class="lineCov">     224098 :         return __cd(__cd(__lhs).count() - __cd(__rhs).count());</span></a>
+<a name="666"><span class="lineNum">     666 </span><span class="lineCov">     644847 :         return __cd(__cd(__lhs).count() - __cd(__rhs).count());</span></a>
 <a name="667"><span class="lineNum">     667 </span>            :       }</a>
 <a name="668"><span class="lineNum">     668 </span>            : </a>
 <a name="669"><span class="lineNum">     669 </span>            :     /// @}</a>
@@ -831,13 +831,13 @@
 <a name="769"><span class="lineNum">     769 </span>            :     template&lt;typename _Rep1, typename _Period1,</a>
 <a name="770"><span class="lineNum">     770 </span>            :              typename _Rep2, typename _Period2&gt;</a>
 <a name="771"><span class="lineNum">     771 </span>            :       constexpr bool</a>
-<a name="772"><span class="lineNum">     772 </span><span class="lineCov">     224098 :       operator&lt;(const duration&lt;_Rep1, _Period1&gt;&amp; __lhs,</span></a>
+<a name="772"><span class="lineNum">     772 </span><span class="lineCov">     644847 :       operator&lt;(const duration&lt;_Rep1, _Period1&gt;&amp; __lhs,</span></a>
 <a name="773"><span class="lineNum">     773 </span>            :                 const duration&lt;_Rep2, _Period2&gt;&amp; __rhs)</a>
 <a name="774"><span class="lineNum">     774 </span>            :       {</a>
 <a name="775"><span class="lineNum">     775 </span>            :         typedef duration&lt;_Rep1, _Period1&gt;                 __dur1;</a>
 <a name="776"><span class="lineNum">     776 </span>            :         typedef duration&lt;_Rep2, _Period2&gt;                 __dur2;</a>
 <a name="777"><span class="lineNum">     777 </span>            :         typedef typename common_type&lt;__dur1,__dur2&gt;::type __ct;</a>
-<a name="778"><span class="lineNum">     778 </span><span class="lineCov">     224098 :         return __ct(__lhs).count() &lt; __ct(__rhs).count();</span></a>
+<a name="778"><span class="lineNum">     778 </span><span class="lineCov">     644847 :         return __ct(__lhs).count() &lt; __ct(__rhs).count();</span></a>
 <a name="779"><span class="lineNum">     779 </span>            :       }</a>
 <a name="780"><span class="lineNum">     780 </span>            : </a>
 <a name="781"><span class="lineNum">     781 </span>            : #if __cpp_lib_three_way_comparison</a>
@@ -864,9 +864,9 @@
 <a name="802"><span class="lineNum">     802 </span>            :     template&lt;typename _Rep1, typename _Period1,</a>
 <a name="803"><span class="lineNum">     803 </span>            :              typename _Rep2, typename _Period2&gt;</a>
 <a name="804"><span class="lineNum">     804 </span>            :       constexpr bool</a>
-<a name="805"><span class="lineNum">     805 </span><span class="lineCov">     224098 :       operator&lt;=(const duration&lt;_Rep1, _Period1&gt;&amp; __lhs,</span></a>
+<a name="805"><span class="lineNum">     805 </span><span class="lineCov">     644847 :       operator&lt;=(const duration&lt;_Rep1, _Period1&gt;&amp; __lhs,</span></a>
 <a name="806"><span class="lineNum">     806 </span>            :                  const duration&lt;_Rep2, _Period2&gt;&amp; __rhs)</a>
-<a name="807"><span class="lineNum">     807 </span><span class="lineCov">     224098 :       { return !(__rhs &lt; __lhs); }</span></a>
+<a name="807"><span class="lineNum">     807 </span><span class="lineCov">     644847 :       { return !(__rhs &lt; __lhs); }</span></a>
 <a name="808"><span class="lineNum">     808 </span>            : </a>
 <a name="809"><span class="lineNum">     809 </span>            :     template&lt;typename _Rep1, typename _Period1,</a>
 <a name="810"><span class="lineNum">     810 </span>            :              typename _Rep2, typename _Period2&gt;</a>

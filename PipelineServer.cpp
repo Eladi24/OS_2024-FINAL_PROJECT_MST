@@ -98,29 +98,6 @@ int scanGraph(int &n, int &m, stringstream &ss, unique_ptr<Graph> &g)
 }
 
 /**
- * @brief Scans source and destination vertices from the client's input.
- * 
- * @param ss The stringstream containing the client's input.
- * @param src Atomic integer to hold the source vertex.
- * @param dest Atomic integer to hold the destination vertex.
- * @return int 0 if successful, -1 otherwise.
- */
-int scanSrcDest(stringstream &ss, atomic<int> &src, atomic<int> &dest)
-{
-    int tempSrc, tempDest;
-
-    if (!(ss >> tempSrc >> tempDest) || tempSrc < 0 || tempDest < 0)
-    {
-        cerr << "Invalid source or destination" << endl;
-        return -1;
-    }
-
-    src.store(tempSrc, memory_order_release);
-    dest.store(tempDest, memory_order_release);
-    return 0;
-}
-
-/**
  * @brief Handles commands sent by the client.
  * 
  * This function processes various commands related to graph operations and MST calculations.
@@ -255,7 +232,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
                     }
                 }
 
-                if (u < 0 || u > n || v < 0 || v > n || w < 0) 
+                if (u < 0 || u > n || v < 0 || v > n || w < 0 || u == v) 
                 {
                     sendResponse(clientSock, "Invalid edge values. Vertices should be in the range [1, n] and weight should be non-negative.\n");
                     i--;
@@ -285,16 +262,30 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
                 continue;
             }
 
-            pipeline[1]->enqueue([&g, u, v, w]() 
+            pipeline[0]->enqueue([&g, u, v, w, &future, &done, &cv]() 
             {
                 unique_lock<mutex> graphGuard(graphLock);
-                g->addEdge(u, v, w);
+                if (g == nullptr || g->getAdj().empty()) 
+                {
+                    unique_lock<mutex> futureGuard(futureLock);
+                    future = "Graph not initialized.\n";
+                    done.store(true, memory_order_release);
+                    cv.notify_one();
+                    return;
+                }
+                bool success = g->addEdge(u, v, w);
+                unique_lock<mutex> futureGuard(futureLock);
+                if (!success) 
+                {
+                    future = "Invalid edge. Vertices should be in the range [1, n] and weight should be non-negative, or edge already exists.\n";
+                } 
+                else 
+                {
+                    future = "Edge added between vertices " + to_string(u) + " and " + to_string(v) + " with weight " + to_string(w) + ".\n";
+                }
+                done.store(true, memory_order_release);
+                cv.notify_one();
             });
-
-            unique_lock<mutex> futureGuard(futureLock);
-            future = "Edge added between vertices " + to_string(u) + " and " + to_string(v) + " with weight " + to_string(w) + ".\n";
-            done.store(true, memory_order_release);
-            cv.notify_one();
         }
         // Adding REMOVE_EDGE command handling
         else if (cmd == "RemoveEdge") 
@@ -306,36 +297,52 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
                 continue;
             }
 
-            pipeline[1]->enqueue([&g, u, v]() 
+            pipeline[0]->enqueue([&g, u, v, &future, &done, &cv]() 
             {
                 unique_lock<mutex> graphGuard(graphLock);
+                if (g == nullptr || g->getAdj().empty()) 
+                {
+                    unique_lock<mutex> futureGuard(futureLock);
+                    future = "Graph not initialized.\n";
+                    done.store(true, memory_order_release);
+                    cv.notify_one();
+                    return;
+                }
                 bool success = g->removeEdge(u, v);
+                unique_lock<mutex> futureGuard(futureLock);
                 if (!success) 
                 {
-                    unique_lock<mutex> coutGuard(coutLock);
-                    cerr << "Error removing edge between " << u << " and " << v << "\n";
+                    future = "Edge between vertices " + to_string(u) + " and " + to_string(v) + " does not exist.\n";
+                } 
+                else 
+                {
+                    future = "Edge removed between vertices " + to_string(u) + " and " + to_string(v) + ".\n";
                 }
+                done.store(true, memory_order_release);
+                cv.notify_one();
             });
-
-            unique_lock<mutex> futureGuard(futureLock);
-            future = "Edge removed between vertices " + to_string(u) + " and " + to_string(v) + ".\n";
-            done.store(true, memory_order_release);
-            cv.notify_one();
+            
         }
          
         else if (cmd == "Prim" || cmd == "Kruskal")
         {
-            pipeline[1]->enqueue([&]()
+            pipeline[1]->enqueue([&g, cmd, &factory, &mst, &future, &done, &cv, &pipeline]()
             {
                 unique_lock<mutex> graphGuard(graphLock, try_to_lock);
             if (!graphGuard.owns_lock()) 
             {
-                sendResponse(clientSock, "Graph is being used by another thread. Cannot create MST.\n");
+                unique_lock<mutex> futureGuard(futureLock);
+                future = "Graph is being used by another thread. Cannot search for MST using " + cmd + ".\n";
+                done.store(true, memory_order_release);
+                cv.notify_one();
                 return;
             }
             if (g == nullptr || g->getAdj().empty()) 
             {
-                sendResponse(clientSock, "Graph not initialized.\n");
+                unique_lock<mutex> futureGuard(futureLock);
+                future = "Graph not initialized.\n";
+                done.store(true, memory_order_release);
+                cv.notify_one();
                 return;
             }
 
@@ -356,10 +363,13 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
             }
             else 
             {
-                sendResponse(clientSock, "Invalid command: " + cmd + "\n");
+                unique_lock<mutex> futureGuard(futureLock);
+                future = "Invalid command: " + cmd + "\n";
+                done.store(true, memory_order_release);
+                cv.notify_one();
                 return;
             }
-            pipeline[2]->enqueue([&]()
+            pipeline[2]->enqueue([&g, &factory, &mst, &future, &done, &cv, &pipeline, cmd]()
             {
                 mst = factory.createMST(g);
                 {
@@ -369,28 +379,28 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline, 
                     future += mst->printMST();
                     
                 }
-                pipeline[3]->enqueue([&]()
+                pipeline[3]->enqueue([&g, &mst, &future, &done, &cv, &pipeline]()
                 {
                     {
                         unique_lock<mutex> graphGuard(graphLock);
                         unique_lock<mutex> futureGuard(futureLock);
                         future += "TOTAL WEIGHT OF THE MST IS: ";
                         future += to_string(mst->totalWeight()) + "\n\n";
-                        pipeline[4]->enqueue([&]()
+                        pipeline[4]->enqueue([&g, &mst, &future, &done, &cv, &pipeline]()
                         {
                             {
                                 unique_lock<mutex> graphGuard(graphLock);
                                 unique_lock<mutex> futureGuard(futureLock);
                                 future += "THE LONGEST PATH (DIAMETER) OF THE MST IS: ";
                                 future += to_string(mst->diameter()) + "\n\n";
-                                pipeline[5]->enqueue([&]()
+                                pipeline[5]->enqueue([&g, &mst, &future, &done, &cv, &pipeline]()
                                 {
                                     {
                                         unique_lock<mutex> graphGuard(graphLock);
                                         unique_lock<mutex> futureGuard(futureLock);
                                         future += "AVERAGE DISTANCE OF THE MST IS: ";
                                         future += to_string(mst->averageDistanceEdges()) + "\n\n";
-                                        pipeline[6]->enqueue([&]()
+                                        pipeline[6]->enqueue([&g, &mst, &future, &done, &cv, &pipeline]()
                                         {
                                             {
                                                 unique_lock<mutex> graphGuard(graphLock);

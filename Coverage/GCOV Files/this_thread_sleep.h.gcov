@@ -1,0 +1,150 @@
+        -:    0:Source:/usr/include/c++/11/bits/this_thread_sleep.h
+        -:    0:Graph:LFServer.gcno
+        -:    0:Data:LFServer.gcda
+        -:    0:Runs:2
+        -:    1:// std::this_thread::sleep_for/until declarations -*- C++ -*-
+        -:    2:
+        -:    3:// Copyright (C) 2008-2021 Free Software Foundation, Inc.
+        -:    4://
+        -:    5:// This file is part of the GNU ISO C++ Library.  This library is free
+        -:    6:// software; you can redistribute it and/or modify it under the
+        -:    7:// terms of the GNU General Public License as published by the
+        -:    8:// Free Software Foundation; either version 3, or (at your option)
+        -:    9:// any later version.
+        -:   10:
+        -:   11:// This library is distributed in the hope that it will be useful,
+        -:   12:// but WITHOUT ANY WARRANTY; without even the implied warranty of
+        -:   13:// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+        -:   14:// GNU General Public License for more details.
+        -:   15:
+        -:   16:// Under Section 7 of GPL version 3, you are granted additional
+        -:   17:// permissions described in the GCC Runtime Library Exception, version
+        -:   18:// 3.1, as published by the Free Software Foundation.
+        -:   19:
+        -:   20:// You should have received a copy of the GNU General Public License and
+        -:   21:// a copy of the GCC Runtime Library Exception along with this program;
+        -:   22:// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+        -:   23:// <http://www.gnu.org/licenses/>.
+        -:   24:
+        -:   25:/** @file bits/this_thread_sleep.h
+        -:   26: *  This is an internal header file, included by other library headers.
+        -:   27: *  Do not attempt to use it directly. @headername{thread}
+        -:   28: */
+        -:   29:
+        -:   30:#ifndef _GLIBCXX_THIS_THREAD_SLEEP_H
+        -:   31:#define _GLIBCXX_THIS_THREAD_SLEEP_H 1
+        -:   32:
+        -:   33:#pragma GCC system_header
+        -:   34:
+        -:   35:#if __cplusplus >= 201103L
+        -:   36:#include <bits/c++config.h>
+        -:   37:
+        -:   38:#include <chrono> // std::chrono::*
+        -:   39:
+        -:   40:#ifdef _GLIBCXX_USE_NANOSLEEP
+        -:   41:# include <cerrno>  // errno, EINTR
+        -:   42:# include <time.h>  // nanosleep
+        -:   43:#endif
+        -:   44:
+        -:   45:namespace std _GLIBCXX_VISIBILITY(default)
+        -:   46:{
+        -:   47:_GLIBCXX_BEGIN_NAMESPACE_VERSION
+        -:   48:
+        -:   49:  /** @addtogroup threads
+        -:   50:   *  @{
+        -:   51:   */
+        -:   52:
+        -:   53:  /** @namespace std::this_thread
+        -:   54:   *  @brief ISO C++ 2011 namespace for interacting with the current thread
+        -:   55:   *
+        -:   56:   *  C++11 30.3.2 [thread.thread.this] Namespace this_thread.
+        -:   57:   */
+        -:   58:  namespace this_thread
+        -:   59:  {
+        -:   60:#ifndef _GLIBCXX_NO_SLEEP
+        -:   61:
+        -:   62:#ifndef _GLIBCXX_USE_NANOSLEEP
+        -:   63:    void
+        -:   64:    __sleep_for(chrono::seconds, chrono::nanoseconds);
+        -:   65:#endif
+        -:   66:
+        -:   67:    /// this_thread::sleep_for
+        -:   68:    template<typename _Rep, typename _Period>
+        -:   69:      inline void
+function _ZNSt11this_thread9sleep_forIlSt5ratioILl1ELl1000EEEEvRKNSt6chrono8durationIT_T0_EE called 195621 returned 100% blocks executed 76%
+   195621:   70:      sleep_for(const chrono::duration<_Rep, _Period>& __rtime)
+        -:   71:      {
+   195621:   72:	if (__rtime <= __rtime.zero())
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0% (throw)
+branch  4 taken 0% (fallthrough)
+branch  5 taken 100%
+    #####:   73:	  return;
+   195621:   74:	auto __s = chrono::duration_cast<chrono::seconds>(__rtime);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+   195621:   75:	auto __ns = chrono::duration_cast<chrono::nanoseconds>(__rtime - __s);
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+call    3 returned 100%
+branch  4 taken 100% (fallthrough)
+branch  5 taken 0% (throw)
+        -:   76:#ifdef _GLIBCXX_USE_NANOSLEEP
+   391242:   77:	struct ::timespec __ts =
+        -:   78:	  {
+   195621:   79:	    static_cast<std::time_t>(__s.count()),
+call    0 returned 100%
+   195621:   80:	    static_cast<long>(__ns.count())
+call    0 returned 100%
+        -:   81:	  };
+  195621*:   82:	while (::nanosleep(&__ts, &__ts) == -1 && errno == EINTR)
+call    0 returned 100%
+branch  1 taken 100% (fallthrough)
+branch  2 taken 0% (throw)
+branch  3 taken 0% (fallthrough)
+branch  4 taken 100%
+branch  5 never executed
+branch  6 never executed
+branch  7 taken 0%
+branch  8 taken 100% (fallthrough)
+        -:   83:	  { }
+        -:   84:#else
+        -:   85:	__sleep_for(__s, __ns);
+        -:   86:#endif
+        -:   87:      }
+        -:   88:
+        -:   89:    /// this_thread::sleep_until
+        -:   90:    template<typename _Clock, typename _Duration>
+        -:   91:      inline void
+        -:   92:      sleep_until(const chrono::time_point<_Clock, _Duration>& __atime)
+        -:   93:      {
+        -:   94:#if __cplusplus > 201703L
+        -:   95:	static_assert(chrono::is_clock_v<_Clock>);
+        -:   96:#endif
+        -:   97:	auto __now = _Clock::now();
+        -:   98:	if (_Clock::is_steady)
+        -:   99:	  {
+        -:  100:	    if (__now < __atime)
+        -:  101:	      sleep_for(__atime - __now);
+        -:  102:	    return;
+        -:  103:	  }
+        -:  104:	while (__now < __atime)
+        -:  105:	  {
+        -:  106:	    sleep_for(__atime - __now);
+        -:  107:	    __now = _Clock::now();
+        -:  108:	  }
+        -:  109:      }
+        -:  110:#endif // ! NO_SLEEP
+        -:  111:  } // namespace this_thread
+        -:  112:
+        -:  113:  /// @}
+        -:  114:
+        -:  115:_GLIBCXX_END_NAMESPACE_VERSION
+        -:  116:} // namespace
+        -:  117:#endif // C++11
+        -:  118:
+        -:  119:#endif // _GLIBCXX_THIS_THREAD_SLEEP_H

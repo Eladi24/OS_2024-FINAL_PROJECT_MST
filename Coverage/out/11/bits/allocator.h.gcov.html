@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-09-15 12:49:02</td>
+            <td class="headerValue">2024-10-11 14:22:45</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">39</td>
@@ -215,11 +215,11 @@
 <a name="153"><span class="lineNum">     153 </span>            :       // _GLIBCXX_RESOLVE_LIB_DEFECTS</a>
 <a name="154"><span class="lineNum">     154 </span>            :       // 3035. std::allocator's constructors should be constexpr</a>
 <a name="155"><span class="lineNum">     155 </span>            :       _GLIBCXX20_CONSTEXPR</a>
-<a name="156"><span class="lineNum">     156 </span><span class="lineCov">        278 :       allocator() _GLIBCXX_NOTHROW { }</span></a>
+<a name="156"><span class="lineNum">     156 </span><span class="lineCov">        649 :       allocator() _GLIBCXX_NOTHROW { }</span></a>
 <a name="157"><span class="lineNum">     157 </span>            : </a>
 <a name="158"><span class="lineNum">     158 </span>            :       _GLIBCXX20_CONSTEXPR</a>
-<a name="159"><span class="lineNum">     159 </span><span class="lineCov">        380 :       allocator(const allocator&amp; __a) _GLIBCXX_NOTHROW</span></a>
-<a name="160"><span class="lineNum">     160 </span><span class="lineCov">        380 :       : __allocator_base&lt;_Tp&gt;(__a) { }</span></a>
+<a name="159"><span class="lineNum">     159 </span><span class="lineCov">        970 :       allocator(const allocator&amp; __a) _GLIBCXX_NOTHROW</span></a>
+<a name="160"><span class="lineNum">     160 </span><span class="lineCov">        970 :       : __allocator_base&lt;_Tp&gt;(__a) { }</span></a>
 <a name="161"><span class="lineNum">     161 </span>            : </a>
 <a name="162"><span class="lineNum">     162 </span>            : #if __cplusplus &gt;= 201103L</a>
 <a name="163"><span class="lineNum">     163 </span>            :       // Avoid implicit deprecation.</a>
@@ -228,12 +228,12 @@
 <a name="166"><span class="lineNum">     166 </span>            : </a>
 <a name="167"><span class="lineNum">     167 </span>            :       template&lt;typename _Tp1&gt;</a>
 <a name="168"><span class="lineNum">     168 </span>            :         _GLIBCXX20_CONSTEXPR</a>
-<a name="169"><span class="lineNum">     169 </span><span class="lineCov">        108 :         allocator(const allocator&lt;_Tp1&gt;&amp;) _GLIBCXX_NOTHROW { }</span></a>
+<a name="169"><span class="lineNum">     169 </span><span class="lineCov">        308 :         allocator(const allocator&lt;_Tp1&gt;&amp;) _GLIBCXX_NOTHROW { }</span></a>
 <a name="170"><span class="lineNum">     170 </span>            : </a>
 <a name="171"><span class="lineNum">     171 </span>            : #if __cpp_constexpr_dynamic_alloc</a>
 <a name="172"><span class="lineNum">     172 </span>            :       constexpr</a>
 <a name="173"><span class="lineNum">     173 </span>            : #endif</a>
-<a name="174"><span class="lineNum">     174 </span><span class="lineCov">        760 :       ~allocator() _GLIBCXX_NOTHROW { }</span></a>
+<a name="174"><span class="lineNum">     174 </span><span class="lineCov">       1909 :       ~allocator() _GLIBCXX_NOTHROW { }</span></a>
 <a name="175"><span class="lineNum">     175 </span>            : </a>
 <a name="176"><span class="lineNum">     176 </span>            : #if __cplusplus &gt; 201703L</a>
 <a name="177"><span class="lineNum">     177 </span>            :       [[nodiscard,__gnu__::__always_inline__]]</a>
@@ -372,15 +372,15 @@
 <a name="310"><span class="lineNum">     310 </span>            :     struct __shrink_to_fit_aux&lt;_Tp, true&gt;</a>
 <a name="311"><span class="lineNum">     311 </span>            :     {</a>
 <a name="312"><span class="lineNum">     312 </span>            :       static bool</a>
-<a name="313"><span class="lineNum">     313 </span><span class="lineCov">          4 :       _S_do_it(_Tp&amp; __c) noexcept</span></a>
+<a name="313"><span class="lineNum">     313 </span><span class="lineCov">         10 :       _S_do_it(_Tp&amp; __c) noexcept</span></a>
 <a name="314"><span class="lineNum">     314 </span>            :       {</a>
 <a name="315"><span class="lineNum">     315 </span>            : #if __cpp_exceptions</a>
 <a name="316"><span class="lineNum">     316 </span>            :         try</a>
 <a name="317"><span class="lineNum">     317 </span>            :           {</a>
-<a name="318"><span class="lineNum">     318 </span><span class="lineCov">          8 :             _Tp(__make_move_if_noexcept_iterator(__c.begin()),</span></a>
+<a name="318"><span class="lineNum">     318 </span><span class="lineCov">         20 :             _Tp(__make_move_if_noexcept_iterator(__c.begin()),</span></a>
 <a name="319"><span class="lineNum">     319 </span>            :                 __make_move_if_noexcept_iterator(__c.end()),</a>
-<a name="320"><span class="lineNum">     320 </span><span class="lineCov">          4 :                 __c.get_allocator()).swap(__c);</span></a>
-<a name="321"><span class="lineNum">     321 </span><span class="lineCov">          4 :             return true;</span></a>
+<a name="320"><span class="lineNum">     320 </span><span class="lineCov">         10 :                 __c.get_allocator()).swap(__c);</span></a>
+<a name="321"><span class="lineNum">     321 </span><span class="lineCov">         10 :             return true;</span></a>
 <a name="322"><span class="lineNum">     322 </span>            :           }</a>
 <a name="323"><span class="lineNum">     323 </span><span class="lineNoCov">          0 :         catch(...)</span></a>
 <a name="324"><span class="lineNum">     324 </span><span class="lineNoCov">          0 :           { return false; }</span></a>

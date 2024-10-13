@@ -235,18 +235,18 @@ int Tree::diameter()
     return diameterLength;
 }
 
-void Tree::addEdge(int u, int v, int w)
+bool Tree::addEdge(int u, int v, int w)
 {
     if (u < 1 || u > V || v < 1 || v > V)
     {
         cerr << "Invalid edge, vertices must be between 1 and " << V << endl;
-        exit(1);
+        return false;
     }
 
     if (u == v)
     {
         cerr << "Invalid edge, vertices must be different" << endl;
-        exit(1);
+        return false;
     }
 
     if (E >= V - 1)
@@ -258,6 +258,7 @@ void Tree::addEdge(int u, int v, int w)
     adj[u - 1].push_back({u, v, w});
     adj[v - 1].push_back({v, u, w});
     E++;
+    return true;
 }
 
 void Tree::removeEdge(int u, int v)

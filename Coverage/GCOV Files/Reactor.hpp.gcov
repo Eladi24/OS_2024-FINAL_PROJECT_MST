@@ -1,0 +1,74 @@
+        -:    0:Source:Reactor.hpp
+        -:    0:Graph:LFServer.gcno
+        -:    0:Data:LFServer.gcda
+        -:    0:Runs:2
+        -:    1:/**
+        -:    2: * @file Reactor.hpp
+        -:    3: * @brief Header file for the Reactor class.
+        -:    4: */
+        -:    5:
+        -:    6:#ifndef _REACTOR_HPP
+        -:    7:#define _REACTOR_HPP
+        -:    8:
+        -:    9:#include <iostream>
+        -:   10:#include <functional>
+        -:   11:#include <map>
+        -:   12:#include <sys/select.h>
+        -:   13:#include <unistd.h>
+        -:   14:#include <sys/socket.h>
+        -:   15:#include <netinet/in.h>
+        -:   16:#include <arpa/inet.h>
+        -:   17:
+        -:   18:using namespace std;
+        -:   19:
+        -:   20:/**
+        -:   21: * @class Reactor
+        -:   22: * @brief Implements the Reactor pattern for event-driven programming.
+        -:   23: *
+        -:   24: * The Reactor class provides a mechanism for handling multiple I/O events using a single thread.
+        -:   25: * It uses the Reactor pattern, which is a design pattern for handling service requests delivered
+        -:   26: * concurrently to a service handler by one or more inputs. The Reactor class maintains a set of
+        -:   27: * file descriptors and associated event handlers. It allows adding and removing file descriptors
+        -:   28: * along with their corresponding event handlers. The handleEvents() method is used to wait for
+        -:   29: * events on the registered file descriptors and invoke the corresponding event handlers when an
+        -:   30: * event occurs.
+        -:   31: */
+        -:   32:class Reactor
+        -:   33:{
+        -:   34:private:
+        -:   35:    fd_set _master; /**< The master file descriptor set. */
+        -:   36:    fd_set _readFds; /**< The file descriptor set for reading. */
+        -:   37:    int _maxFd; /**< The maximum file descriptor value. */
+        -:   38:    map<int, function<void()>> _handlers; /**< The map of file descriptors and their event handlers. */
+        -:   39:
+        -:   40:public:
+        -:   41:    /**
+        -:   42:     * @brief Default constructor for the Reactor class.
+        -:   43:     */
+function _ZN7ReactorC2Ev called 2 returned 100% blocks executed 100%
+        2:   44:    Reactor() : _maxFd(0)
+call    0 returned 100%
+        -:   45:    {
+       34:   46:        FD_ZERO(&_readFds);
+branch  0 taken 94%
+branch  1 taken 6% (fallthrough)
+       34:   47:        FD_ZERO(&_master);
+branch  0 taken 94%
+branch  1 taken 6% (fallthrough)
+        2:   48:    }
+        -:   49:
+        -:   50:    /**
+        -:   51:     * @brief Adds a file descriptor and its corresponding event handler to the Reactor.
+        -:   52:     * @param fd The file descriptor to add.
+        -:   53:     * @param event The event handler function to associate with the file descriptor.
+        -:   54:     */
+        -:   55:    void addHandle(int fd, function<void()> event);
+        -:   56:    
+        -:   57:    /**
+        -:   58:     * @brief Waits for events on the registered file descriptors and invokes the corresponding event handlers.
+        -:   59:     * @return The number of events handled.
+        -:   60:     */
+        -:   61:    int handleEvents();
+        -:   62:};
+        -:   63:
+        -:   64:#endif

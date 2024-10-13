@@ -37,11 +37,11 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-09-15 12:49:02</td>
+            <td class="headerValue">2024-10-11 14:22:45</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntry">13</td>
-            <td class="headerCovTableEntry">13</td>
+            <td class="headerCovTableEntry">18</td>
+            <td class="headerCovTableEntry">18</td>
             <td class="headerCovTableEntryHi">100.0 %</td>
           </tr>
           <tr><td><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
@@ -110,7 +110,7 @@
 <a name="48"><span class="lineNum">      48 </span>            :     void run();</a>
 <a name="49"><span class="lineNum">      49 </span>            : </a>
 <a name="50"><span class="lineNum">      50 </span>            : public:</a>
-<a name="51"><span class="lineNum">      51 </span><span class="lineCov">         14 :     ActiveObject() :_tasks(), _done(false), _worker(&amp;ActiveObject::run, this) {}</span></a>
+<a name="51"><span class="lineNum">      51 </span><span class="lineCov">         42 :     ActiveObject() :_tasks(), _done(false), _worker(&amp;ActiveObject::run, this) {}</span></a>
 <a name="52"><span class="lineNum">      52 </span>            : </a>
 <a name="53"><span class="lineNum">      53 </span>            :     ~ActiveObject();</a>
 <a name="54"><span class="lineNum">      54 </span>            :     </a>
@@ -122,17 +122,17 @@
 <a name="60"><span class="lineNum">      60 </span>            :     * @return void</a>
 <a name="61"><span class="lineNum">      61 </span>            :     */</a>
 <a name="62"><span class="lineNum">      62 </span>            :     template &lt;class F&gt;</a>
-<a name="63"><span class="lineNum">      63 </span><span class="lineCov">         72 :     void enqueue(F task)</span></a>
+<a name="63"><span class="lineNum">      63 </span><span class="lineCov">        142 :     void enqueue(F task)</span></a>
 <a name="64"><span class="lineNum">      64 </span>            :     {   </a>
 <a name="65"><span class="lineNum">      65 </span>            :         // Lock the mutex to protect the task queue</a>
-<a name="66"><span class="lineNum">      66 </span><span class="lineCov">         72 :         unique_lock&lt;mutex&gt; lock(_mx);</span></a>
+<a name="66"><span class="lineNum">      66 </span><span class="lineCov">        142 :         unique_lock&lt;mutex&gt; lock(_mx);</span></a>
 <a name="67"><span class="lineNum">      67 </span>            :         // Move the task into the task queue</a>
-<a name="68"><span class="lineNum">      68 </span><span class="lineCov">         72 :         _tasks.emplace(task);</span></a>
+<a name="68"><span class="lineNum">      68 </span><span class="lineCov">        142 :         _tasks.emplace(task);</span></a>
 <a name="69"><span class="lineNum">      69 </span>            :         // Wake up the worker thread</a>
-<a name="70"><span class="lineNum">      70 </span><span class="lineCov">         72 :         _cv.notify_one();</span></a>
-<a name="71"><span class="lineNum">      71 </span><span class="lineCov">         72 :     }</span></a>
+<a name="70"><span class="lineNum">      70 </span><span class="lineCov">        142 :         _cv.notify_one();</span></a>
+<a name="71"><span class="lineNum">      71 </span><span class="lineCov">        142 :     }</span></a>
 <a name="72"><span class="lineNum">      72 </span>            : </a>
-<a name="73"><span class="lineNum">      73 </span><span class="lineCov">          2 :     static mutex&amp; getOutputMutex() { return _outputMx; }</span></a>
+<a name="73"><span class="lineNum">      73 </span><span class="lineCov">          6 :     static mutex&amp; getOutputMutex() { return _outputMx; }</span></a>
 <a name="74"><span class="lineNum">      74 </span>            :     </a>
 <a name="75"><span class="lineNum">      75 </span>            : };</a>
 <a name="76"><span class="lineNum">      76 </span>            : </a>

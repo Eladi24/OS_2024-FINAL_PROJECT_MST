@@ -164,7 +164,7 @@ string shortestPath();
          * @param v The destination vertex.
          * @param w The weight of the edge.
          */
-        void addEdge(int u, int v, int w) override;
+        bool addEdge(int u, int v, int w) override;
 
         /**
          * @brief Throws an error if an attempt is made to remove an edge.

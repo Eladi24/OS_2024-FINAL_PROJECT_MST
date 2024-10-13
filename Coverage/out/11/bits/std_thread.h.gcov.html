@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-09-15 12:49:02</td>
+            <td class="headerValue">2024-10-11 14:22:45</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">12</td>
@@ -145,10 +145,10 @@
 <a name="83"><span class="lineNum">      83 </span>            :       native_handle_type        _M_thread;</a>
 <a name="84"><span class="lineNum">      84 </span>            : </a>
 <a name="85"><span class="lineNum">      85 </span>            :     public:</a>
-<a name="86"><span class="lineNum">      86 </span><span class="lineCov">         36 :       id() noexcept : _M_thread() { }</span></a>
+<a name="86"><span class="lineNum">      86 </span><span class="lineCov">        108 :       id() noexcept : _M_thread() { }</span></a>
 <a name="87"><span class="lineNum">      87 </span>            : </a>
 <a name="88"><span class="lineNum">      88 </span>            :       explicit</a>
-<a name="89"><span class="lineNum">      89 </span><span class="lineCov">          8 :       id(native_handle_type __id) : _M_thread(__id) { }</span></a>
+<a name="89"><span class="lineNum">      89 </span><span class="lineCov">         24 :       id(native_handle_type __id) : _M_thread(__id) { }</span></a>
 <a name="90"><span class="lineNum">      90 </span>            : </a>
 <a name="91"><span class="lineNum">      91 </span>            :     private:</a>
 <a name="92"><span class="lineNum">      92 </span>            :       friend class thread;</a>
@@ -186,8 +186,8 @@
 <a name="124"><span class="lineNum">     124 </span>            :     template&lt;typename _Callable, typename... _Args,</a>
 <a name="125"><span class="lineNum">     125 </span>            :              typename = _Require&lt;__not_same&lt;_Callable&gt;&gt;&gt;</a>
 <a name="126"><span class="lineNum">     126 </span>            :       explicit</a>
-<a name="127"><span class="lineNum">     127 </span><span class="lineCov">         14 :       thread(_Callable&amp;&amp; __f, _Args&amp;&amp;... __args)</span></a>
-<a name="128"><span class="lineNum">     128 </span><span class="lineCov">         14 :       {</span></a>
+<a name="127"><span class="lineNum">     127 </span><span class="lineCov">         42 :       thread(_Callable&amp;&amp; __f, _Args&amp;&amp;... __args)</span></a>
+<a name="128"><span class="lineNum">     128 </span><span class="lineCov">         42 :       {</span></a>
 <a name="129"><span class="lineNum">     129 </span>            :         static_assert( __is_invocable&lt;typename decay&lt;_Callable&gt;::type,</a>
 <a name="130"><span class="lineNum">     130 </span>            :                                       typename decay&lt;_Args&gt;::type...&gt;::value,</a>
 <a name="131"><span class="lineNum">     131 </span>            :           &quot;std::thread arguments must be invocable after conversion to rvalues&quot;</a>
@@ -197,22 +197,22 @@
 <a name="135"><span class="lineNum">     135 </span>            :         // Create a reference to pthread_create, not just the gthr weak symbol.</a>
 <a name="136"><span class="lineNum">     136 </span>            :         auto __depend = reinterpret_cast&lt;void(*)()&gt;(&amp;pthread_create);</a>
 <a name="137"><span class="lineNum">     137 </span>            : #else</a>
-<a name="138"><span class="lineNum">     138 </span><span class="lineCov">         14 :         auto __depend = nullptr;</span></a>
+<a name="138"><span class="lineNum">     138 </span><span class="lineCov">         42 :         auto __depend = nullptr;</span></a>
 <a name="139"><span class="lineNum">     139 </span>            : #endif</a>
 <a name="140"><span class="lineNum">     140 </span>            :         using _Wrapper = _Call_wrapper&lt;_Callable, _Args...&gt;;</a>
 <a name="141"><span class="lineNum">     141 </span>            :         // Create a call wrapper with DECAY_COPY(__f) as its target object</a>
 <a name="142"><span class="lineNum">     142 </span>            :         // and DECAY_COPY(__args)... as its bound argument entities.</a>
-<a name="143"><span class="lineNum">     143 </span><span class="lineCov">         14 :         _M_start_thread(_State_ptr(new _State_impl&lt;_Wrapper&gt;(</span></a>
-<a name="144"><span class="lineNum">     144 </span><span class="lineCov">         14 :               std::forward&lt;_Callable&gt;(__f), std::forward&lt;_Args&gt;(__args)...)),</span></a>
+<a name="143"><span class="lineNum">     143 </span><span class="lineCov">         42 :         _M_start_thread(_State_ptr(new _State_impl&lt;_Wrapper&gt;(</span></a>
+<a name="144"><span class="lineNum">     144 </span><span class="lineCov">         42 :               std::forward&lt;_Callable&gt;(__f), std::forward&lt;_Args&gt;(__args)...)),</span></a>
 <a name="145"><span class="lineNum">     145 </span>            :             __depend);</a>
-<a name="146"><span class="lineNum">     146 </span><span class="lineCov">         14 :       }</span></a>
+<a name="146"><span class="lineNum">     146 </span><span class="lineCov">         42 :       }</span></a>
 <a name="147"><span class="lineNum">     147 </span>            : #endif // _GLIBCXX_HAS_GTHREADS</a>
 <a name="148"><span class="lineNum">     148 </span>            : </a>
-<a name="149"><span class="lineNum">     149 </span><span class="lineCov">         14 :     ~thread()</span></a>
+<a name="149"><span class="lineNum">     149 </span><span class="lineCov">         42 :     ~thread()</span></a>
 <a name="150"><span class="lineNum">     150 </span>            :     {</a>
-<a name="151"><span class="lineNum">     151 </span><span class="lineCov">         14 :       if (joinable())</span></a>
+<a name="151"><span class="lineNum">     151 </span><span class="lineCov">         42 :       if (joinable())</span></a>
 <a name="152"><span class="lineNum">     152 </span><span class="lineNoCov">          0 :         std::terminate();</span></a>
-<a name="153"><span class="lineNum">     153 </span><span class="lineCov">         14 :     }</span></a>
+<a name="153"><span class="lineNum">     153 </span><span class="lineCov">         42 :     }</span></a>
 <a name="154"><span class="lineNum">     154 </span>            : </a>
 <a name="155"><span class="lineNum">     155 </span>            :     thread(const thread&amp;) = delete;</a>
 <a name="156"><span class="lineNum">     156 </span>            : </a>
@@ -234,8 +234,8 @@
 <a name="172"><span class="lineNum">     172 </span>            :     { std::swap(_M_id, __t._M_id); }</a>
 <a name="173"><span class="lineNum">     173 </span>            : </a>
 <a name="174"><span class="lineNum">     174 </span>            :     bool</a>
-<a name="175"><span class="lineNum">     175 </span><span class="lineCov">         14 :     joinable() const noexcept</span></a>
-<a name="176"><span class="lineNum">     176 </span><span class="lineCov">         14 :     { return !(_M_id == id()); }</span></a>
+<a name="175"><span class="lineNum">     175 </span><span class="lineCov">         42 :     joinable() const noexcept</span></a>
+<a name="176"><span class="lineNum">     176 </span><span class="lineCov">         42 :     { return !(_M_id == id()); }</span></a>
 <a name="177"><span class="lineNum">     177 </span>            : </a>
 <a name="178"><span class="lineNum">     178 </span>            :     void</a>
 <a name="179"><span class="lineNum">     179 </span>            :     join();</a>
@@ -265,12 +265,12 @@
 <a name="203"><span class="lineNum">     203 </span>            :         _Callable               _M_func;</a>
 <a name="204"><span class="lineNum">     204 </span>            : </a>
 <a name="205"><span class="lineNum">     205 </span>            :         template&lt;typename... _Args&gt;</a>
-<a name="206"><span class="lineNum">     206 </span><span class="lineCov">         14 :           _State_impl(_Args&amp;&amp;... __args)</span></a>
-<a name="207"><span class="lineNum">     207 </span><span class="lineCov">         14 :           : _M_func(std::forward&lt;_Args&gt;(__args)...)</span></a>
-<a name="208"><span class="lineNum">     208 </span><span class="lineCov">         14 :           { }</span></a>
+<a name="206"><span class="lineNum">     206 </span><span class="lineCov">         42 :           _State_impl(_Args&amp;&amp;... __args)</span></a>
+<a name="207"><span class="lineNum">     207 </span><span class="lineCov">         42 :           : _M_func(std::forward&lt;_Args&gt;(__args)...)</span></a>
+<a name="208"><span class="lineNum">     208 </span><span class="lineCov">         42 :           { }</span></a>
 <a name="209"><span class="lineNum">     209 </span>            : </a>
 <a name="210"><span class="lineNum">     210 </span>            :         void</a>
-<a name="211"><span class="lineNum">     211 </span><span class="lineCov">         14 :         _M_run() { _M_func(); }</span></a>
+<a name="211"><span class="lineNum">     211 </span><span class="lineCov">         42 :         _M_run() { _M_func(); }</span></a>
 <a name="212"><span class="lineNum">     212 </span>            :       };</a>
 <a name="213"><span class="lineNum">     213 </span>            : </a>
 <a name="214"><span class="lineNum">     214 </span>            :     void</a>
@@ -302,9 +302,9 @@
 <a name="240"><span class="lineNum">     240 </span>            :       {</a>
 <a name="241"><span class="lineNum">     241 </span>            :         template&lt;typename... _Args&gt;</a>
 <a name="242"><span class="lineNum">     242 </span>            :           explicit</a>
-<a name="243"><span class="lineNum">     243 </span><span class="lineCov">         14 :           _Invoker(_Args&amp;&amp;... __args)</span></a>
-<a name="244"><span class="lineNum">     244 </span><span class="lineCov">         14 :           : _M_t(std::forward&lt;_Args&gt;(__args)...)</span></a>
-<a name="245"><span class="lineNum">     245 </span><span class="lineCov">         14 :           { }</span></a>
+<a name="243"><span class="lineNum">     243 </span><span class="lineCov">         42 :           _Invoker(_Args&amp;&amp;... __args)</span></a>
+<a name="244"><span class="lineNum">     244 </span><span class="lineCov">         42 :           : _M_t(std::forward&lt;_Args&gt;(__args)...)</span></a>
+<a name="245"><span class="lineNum">     245 </span><span class="lineCov">         42 :           { }</span></a>
 <a name="246"><span class="lineNum">     246 </span>            : </a>
 <a name="247"><span class="lineNum">     247 </span>            :         _Tuple _M_t;</a>
 <a name="248"><span class="lineNum">     248 </span>            : </a>
@@ -317,15 +317,15 @@
 <a name="255"><span class="lineNum">     255 </span>            : </a>
 <a name="256"><span class="lineNum">     256 </span>            :         template&lt;size_t... _Ind&gt;</a>
 <a name="257"><span class="lineNum">     257 </span>            :           typename __result&lt;_Tuple&gt;::type</a>
-<a name="258"><span class="lineNum">     258 </span><span class="lineCov">         14 :           _M_invoke(_Index_tuple&lt;_Ind...&gt;)</span></a>
-<a name="259"><span class="lineNum">     259 </span><span class="lineCov">         14 :           { return std::__invoke(std::get&lt;_Ind&gt;(std::move(_M_t))...); }</span></a>
+<a name="258"><span class="lineNum">     258 </span><span class="lineCov">         42 :           _M_invoke(_Index_tuple&lt;_Ind...&gt;)</span></a>
+<a name="259"><span class="lineNum">     259 </span><span class="lineCov">         42 :           { return std::__invoke(std::get&lt;_Ind&gt;(std::move(_M_t))...); }</span></a>
 <a name="260"><span class="lineNum">     260 </span>            : </a>
 <a name="261"><span class="lineNum">     261 </span>            :         typename __result&lt;_Tuple&gt;::type</a>
-<a name="262"><span class="lineNum">     262 </span><span class="lineCov">         14 :         operator()()</span></a>
+<a name="262"><span class="lineNum">     262 </span><span class="lineCov">         42 :         operator()()</span></a>
 <a name="263"><span class="lineNum">     263 </span>            :         {</a>
 <a name="264"><span class="lineNum">     264 </span>            :           using _Indices</a>
 <a name="265"><span class="lineNum">     265 </span>            :             = typename _Build_index_tuple&lt;tuple_size&lt;_Tuple&gt;::value&gt;::__type;</a>
-<a name="266"><span class="lineNum">     266 </span><span class="lineCov">         14 :           return _M_invoke(_Indices());</span></a>
+<a name="266"><span class="lineNum">     266 </span><span class="lineCov">         42 :           return _M_invoke(_Indices());</span></a>
 <a name="267"><span class="lineNum">     267 </span>            :         }</a>
 <a name="268"><span class="lineNum">     268 </span>            :       };</a>
 <a name="269"><span class="lineNum">     269 </span>            : </a>
@@ -346,13 +346,13 @@
 <a name="284"><span class="lineNum">     284 </span>            :   { __x.swap(__y); }</a>
 <a name="285"><span class="lineNum">     285 </span>            : </a>
 <a name="286"><span class="lineNum">     286 </span>            :   inline bool</a>
-<a name="287"><span class="lineNum">     287 </span><span class="lineCov">         22 :   operator==(thread::id __x, thread::id __y) noexcept</span></a>
+<a name="287"><span class="lineNum">     287 </span><span class="lineCov">         66 :   operator==(thread::id __x, thread::id __y) noexcept</span></a>
 <a name="288"><span class="lineNum">     288 </span>            :   {</a>
 <a name="289"><span class="lineNum">     289 </span>            :     // pthread_equal is undefined if either thread ID is not valid, so we</a>
 <a name="290"><span class="lineNum">     290 </span>            :     // can't safely use __gthread_equal on default-constructed values (nor</a>
 <a name="291"><span class="lineNum">     291 </span>            :     // the non-zero value returned by this_thread::get_id() for</a>
 <a name="292"><span class="lineNum">     292 </span>            :     // single-threaded programs using GNU libc). Assume EqualityComparable.</a>
-<a name="293"><span class="lineNum">     293 </span><span class="lineCov">         22 :     return __x._M_thread == __y._M_thread;</span></a>
+<a name="293"><span class="lineNum">     293 </span><span class="lineCov">         66 :     return __x._M_thread == __y._M_thread;</span></a>
 <a name="294"><span class="lineNum">     294 </span>            :   }</a>
 <a name="295"><span class="lineNum">     295 </span>            : </a>
 <a name="296"><span class="lineNum">     296 </span>            :   // N.B. other comparison operators are defined in &lt;thread&gt;</a>
@@ -372,12 +372,12 @@
 <a name="310"><span class="lineNum">     310 </span>            :   {</a>
 <a name="311"><span class="lineNum">     311 </span>            :     /// this_thread::get_id</a>
 <a name="312"><span class="lineNum">     312 </span>            :     inline thread::id</a>
-<a name="313"><span class="lineNum">     313 </span><span class="lineCov">          8 :     get_id() noexcept</span></a>
+<a name="313"><span class="lineNum">     313 </span><span class="lineCov">         24 :     get_id() noexcept</span></a>
 <a name="314"><span class="lineNum">     314 </span>            :     {</a>
 <a name="315"><span class="lineNum">     315 </span>            : #ifndef _GLIBCXX_HAS_GTHREADS</a>
 <a name="316"><span class="lineNum">     316 </span>            :       return thread::id(1);</a>
 <a name="317"><span class="lineNum">     317 </span>            : #elif defined _GLIBCXX_NATIVE_THREAD_ID</a>
-<a name="318"><span class="lineNum">     318 </span><span class="lineCov">          8 :       return thread::id(_GLIBCXX_NATIVE_THREAD_ID);</span></a>
+<a name="318"><span class="lineNum">     318 </span><span class="lineCov">         24 :       return thread::id(_GLIBCXX_NATIVE_THREAD_ID);</span></a>
 <a name="319"><span class="lineNum">     319 </span>            : #else</a>
 <a name="320"><span class="lineNum">     320 </span>            :       return thread::id(__gthread_self());</a>
 <a name="321"><span class="lineNum">     321 </span>            : #endif</a>

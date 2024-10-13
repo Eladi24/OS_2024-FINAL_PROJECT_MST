@@ -76,7 +76,7 @@ lcov:
 rebuild: clean all
 
 clear:
-	rm -f *.txt *.info 
+	rm -f *.info pipeline-valgrind-out.txt pipeline-helgrind-out.txt lf-valgrind-out.txt lf-helgrind-out.txt 
 	rm -rf out
 	clear
 	
@@ -85,4 +85,5 @@ clear:
 
 # Clean
 clean:
-	rm -f *.o *.so *.txt *.gcda *.gcno *.gcov *.info PipelineServer LFServer
+	rm -f *.o *.so *.gcda *.gcno *.gcov *.info PipelineServer LFServer pipeline-valgrind-out.txt pipeline-helgrind-out.txt \
+	lf-valgrind-out.txt lf-helgrind-out.txt

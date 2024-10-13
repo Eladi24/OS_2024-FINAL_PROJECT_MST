@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-09-15 12:49:02</td>
+            <td class="headerValue">2024-10-11 14:22:45</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">4</td>
@@ -135,7 +135,7 @@
 <a name="73"><span class="lineNum">      73 </span>            :     atomic&amp; operator=(const atomic&amp;) = delete;</a>
 <a name="74"><span class="lineNum">      74 </span>            :     atomic&amp; operator=(const atomic&amp;) volatile = delete;</a>
 <a name="75"><span class="lineNum">      75 </span>            : </a>
-<a name="76"><span class="lineNum">      76 </span><span class="lineCov">         26 :     constexpr atomic(bool __i) noexcept : _M_base(__i) { }</span></a>
+<a name="76"><span class="lineNum">      76 </span><span class="lineCov">        102 :     constexpr atomic(bool __i) noexcept : _M_base(__i) { }</span></a>
 <a name="77"><span class="lineNum">      77 </span>            : </a>
 <a name="78"><span class="lineNum">      78 </span>            :     bool</a>
 <a name="79"><span class="lineNum">      79 </span>            :     operator=(bool __i) noexcept</a>
@@ -145,8 +145,8 @@
 <a name="83"><span class="lineNum">      83 </span>            :     operator=(bool __i) volatile noexcept</a>
 <a name="84"><span class="lineNum">      84 </span>            :     { return _M_base.operator=(__i); }</a>
 <a name="85"><span class="lineNum">      85 </span>            : </a>
-<a name="86"><span class="lineNum">      86 </span><span class="lineCov">         74 :     operator bool() const noexcept</span></a>
-<a name="87"><span class="lineNum">      87 </span><span class="lineCov">        148 :     { return _M_base.load(); }</span></a>
+<a name="86"><span class="lineNum">      86 </span><span class="lineCov">        150 :     operator bool() const noexcept</span></a>
+<a name="87"><span class="lineNum">      87 </span><span class="lineCov">        300 :     { return _M_base.load(); }</span></a>
 <a name="88"><span class="lineNum">      88 </span>            : </a>
 <a name="89"><span class="lineNum">      89 </span>            :     operator bool() const volatile noexcept</a>
 <a name="90"><span class="lineNum">      90 </span>            :     { return _M_base.load(); }</a>
@@ -162,16 +162,16 @@
 <a name="100"><span class="lineNum">     100 </span>            : #endif</a>
 <a name="101"><span class="lineNum">     101 </span>            : </a>
 <a name="102"><span class="lineNum">     102 </span>            :     void</a>
-<a name="103"><span class="lineNum">     103 </span><span class="lineCov">         96 :     store(bool __i, memory_order __m = memory_order_seq_cst) noexcept</span></a>
-<a name="104"><span class="lineNum">     104 </span><span class="lineCov">         96 :     { _M_base.store(__i, __m); }</span></a>
+<a name="103"><span class="lineNum">     103 </span><span class="lineCov">        218 :     store(bool __i, memory_order __m = memory_order_seq_cst) noexcept</span></a>
+<a name="104"><span class="lineNum">     104 </span><span class="lineCov">        218 :     { _M_base.store(__i, __m); }</span></a>
 <a name="105"><span class="lineNum">     105 </span>            : </a>
 <a name="106"><span class="lineNum">     106 </span>            :     void</a>
 <a name="107"><span class="lineNum">     107 </span>            :     store(bool __i, memory_order __m = memory_order_seq_cst) volatile noexcept</a>
 <a name="108"><span class="lineNum">     108 </span>            :     { _M_base.store(__i, __m); }</a>
 <a name="109"><span class="lineNum">     109 </span>            : </a>
 <a name="110"><span class="lineNum">     110 </span>            :     bool</a>
-<a name="111"><span class="lineNum">     111 </span><span class="lineCov">        363 :     load(memory_order __m = memory_order_seq_cst) const noexcept</span></a>
-<a name="112"><span class="lineNum">     112 </span><span class="lineCov">        726 :     { return _M_base.load(__m); }</span></a>
+<a name="111"><span class="lineNum">     111 </span><span class="lineCov">        918 :     load(memory_order __m = memory_order_seq_cst) const noexcept</span></a>
+<a name="112"><span class="lineNum">     112 </span><span class="lineCov">       1836 :     { return _M_base.load(__m); }</span></a>
 <a name="113"><span class="lineNum">     113 </span>            : </a>
 <a name="114"><span class="lineNum">     114 </span>            :     bool</a>
 <a name="115"><span class="lineNum">     115 </span>            :     load(memory_order __m = memory_order_seq_cst) const volatile noexcept</a>

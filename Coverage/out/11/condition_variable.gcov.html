@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-09-15 12:49:02</td>
+            <td class="headerValue">2024-10-11 14:22:45</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">3</td>
@@ -159,11 +159,11 @@
 <a name="97"><span class="lineNum">      97 </span>            : </a>
 <a name="98"><span class="lineNum">      98 </span>            :     template&lt;typename _Predicate&gt;</a>
 <a name="99"><span class="lineNum">      99 </span>            :       void</a>
-<a name="100"><span class="lineNum">     100 </span><span class="lineCov">        109 :       wait(unique_lock&lt;mutex&gt;&amp; __lock, _Predicate __p)</span></a>
+<a name="100"><span class="lineNum">     100 </span><span class="lineCov">        252 :       wait(unique_lock&lt;mutex&gt;&amp; __lock, _Predicate __p)</span></a>
 <a name="101"><span class="lineNum">     101 </span>            :       {</a>
-<a name="102"><span class="lineNum">     102 </span><span class="lineCov">        196 :         while (!__p())</span></a>
-<a name="103"><span class="lineNum">     103 </span><span class="lineCov">         87 :           wait(__lock);</span></a>
-<a name="104"><span class="lineNum">     104 </span><span class="lineCov">        109 :       }</span></a>
+<a name="102"><span class="lineNum">     102 </span><span class="lineCov">        472 :         while (!__p())</span></a>
+<a name="103"><span class="lineNum">     103 </span><span class="lineCov">        220 :           wait(__lock);</span></a>
+<a name="104"><span class="lineNum">     104 </span><span class="lineCov">        252 :       }</span></a>
 <a name="105"><span class="lineNum">     105 </span>            : </a>
 <a name="106"><span class="lineNum">     106 </span>            : #ifdef _GLIBCXX_USE_PTHREAD_COND_CLOCKWAIT</a>
 <a name="107"><span class="lineNum">     107 </span>            :     template&lt;typename _Duration&gt;</a>

@@ -75,24 +75,6 @@ int scanGraph(int clientSock, int &n, int &m, stringstream &ss, unique_ptr<Graph
     return 0;
 }
 
-/**
- * @brief Scans source and destination vertices from the client's input.
- * 
- * @param ss The stringstream containing the client's input.
- * @param src Source vertex.
- * @param dest Destination vertex.
- * @return int 0 if successful, -1 otherwise.
- */
-int scanSrcDest(stringstream &ss, int &src, int &dest)
-{
-    if (!(ss >> src >> dest) || src < 0 || dest < 0)
-    {
-        cerr << "Invalid source or destination" << endl;
-        return -1;
-    }
-
-    return 0;
-}
 
 /**
  * @brief Handles commands sent by the client.
@@ -204,7 +186,7 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory, u
                     }
                 }
 
-                if (u < 0 || u > n || v < 0 || v > n || w < 0)
+                if (u < 0 || u > n || v < 0 || v > n || w < 0 || u == v)
                 {
                     sendResponse(clientSock, "Invalid edge values. Vertices should be in the range [1, n] and weight should be non-negative.\n");
                     i--;
@@ -289,8 +271,16 @@ response += "SHORTEST PATH IS: " + mst->shortestPath() + "\n";
         }
         else
         {
-            g->addEdge(u, v, w);
-            response = "Edge added between " + to_string(u) + " and " + to_string(v) + " with weight " + to_string(w) + "\n";
+            bool res = g->addEdge(u, v, w);
+            
+            if (!res)
+            {
+                response = "Invalid edge. Vertices should range from 1 to " + to_string(g->getVerticesNumber()) + ". or edge already exists.\n";
+            }
+            else
+            {
+                response = "Edge added between " + to_string(u) + " and " + to_string(v) + " with weight " + to_string(w) + "\n";
+            }
         }
     }
 

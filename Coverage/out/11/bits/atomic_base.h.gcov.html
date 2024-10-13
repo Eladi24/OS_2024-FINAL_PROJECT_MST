@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-09-15 12:49:02</td>
+            <td class="headerValue">2024-10-11 14:22:45</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">3</td>
@@ -163,9 +163,9 @@
 <a name="101"><span class="lineNum">     101 </span>            :   }</a>
 <a name="102"><span class="lineNum">     102 </span>            : </a>
 <a name="103"><span class="lineNum">     103 </span>            :   constexpr memory_order</a>
-<a name="104"><span class="lineNum">     104 </span><span class="lineCov">        640 :   operator&amp;(memory_order __m, __memory_order_modifier __mod)</span></a>
+<a name="104"><span class="lineNum">     104 </span><span class="lineCov">       1446 :   operator&amp;(memory_order __m, __memory_order_modifier __mod)</span></a>
 <a name="105"><span class="lineNum">     105 </span>            :   {</a>
-<a name="106"><span class="lineNum">     106 </span><span class="lineCov">        640 :     return memory_order(int(__m) &amp; int(__mod));</span></a>
+<a name="106"><span class="lineNum">     106 </span><span class="lineCov">       1446 :     return memory_order(int(__m) &amp; int(__mod));</span></a>
 <a name="107"><span class="lineNum">     107 </span>            :   }</a>
 <a name="108"><span class="lineNum">     108 </span>            : </a>
 <a name="109"><span class="lineNum">     109 </span>            :   // Drop release ordering as per [atomics.types.operations.req]/21</a>
@@ -404,10 +404,10 @@
 <a name="342"><span class="lineNum">     342 </span>            :       __atomic_base&amp; operator=(const __atomic_base&amp;) volatile = delete;</a>
 <a name="343"><span class="lineNum">     343 </span>            : </a>
 <a name="344"><span class="lineNum">     344 </span>            :       // Requires __int_type convertible to _M_i.</a>
-<a name="345"><span class="lineNum">     345 </span><span class="lineCov">         26 :       constexpr __atomic_base(__int_type __i) noexcept : _M_i (__i) { }</span></a>
+<a name="345"><span class="lineNum">     345 </span><span class="lineCov">        102 :       constexpr __atomic_base(__int_type __i) noexcept : _M_i (__i) { }</span></a>
 <a name="346"><span class="lineNum">     346 </span>            : </a>
-<a name="347"><span class="lineNum">     347 </span><span class="lineCov">          3 :       operator __int_type() const noexcept</span></a>
-<a name="348"><span class="lineNum">     348 </span><span class="lineCov">          3 :       { return load(); }</span></a>
+<a name="347"><span class="lineNum">     347 </span><span class="lineCov">          8 :       operator __int_type() const noexcept</span></a>
+<a name="348"><span class="lineNum">     348 </span><span class="lineCov">          8 :       { return load(); }</span></a>
 <a name="349"><span class="lineNum">     349 </span>            : </a>
 <a name="350"><span class="lineNum">     350 </span>            :       operator __int_type() const volatile noexcept</a>
 <a name="351"><span class="lineNum">     351 </span>            :       { return load(); }</a>
@@ -518,13 +518,13 @@
 <a name="456"><span class="lineNum">     456 </span>            :       store(__int_type __i, memory_order __m = memory_order_seq_cst) noexcept</a>
 <a name="457"><span class="lineNum">     457 </span>            :       {</a>
 <a name="458"><span class="lineNum">     458 </span>            :         memory_order __b __attribute__ ((__unused__))</a>
-<a name="459"><span class="lineNum">     459 </span><span class="lineCov">        139 :           = __m &amp; __memory_order_mask;</span></a>
+<a name="459"><span class="lineNum">     459 </span><span class="lineCov">        283 :           = __m &amp; __memory_order_mask;</span></a>
 <a name="460"><span class="lineNum">     460 </span>            :         __glibcxx_assert(__b != memory_order_acquire);</a>
 <a name="461"><span class="lineNum">     461 </span>            :         __glibcxx_assert(__b != memory_order_acq_rel);</a>
 <a name="462"><span class="lineNum">     462 </span>            :         __glibcxx_assert(__b != memory_order_consume);</a>
 <a name="463"><span class="lineNum">     463 </span>            : </a>
-<a name="464"><span class="lineNum">     464 </span><span class="lineCov">        139 :         __atomic_store_n(&amp;_M_i, __i, int(__m));</span></a>
-<a name="465"><span class="lineNum">     465 </span><span class="lineCov">        139 :       }</span></a>
+<a name="464"><span class="lineNum">     464 </span><span class="lineCov">        283 :         __atomic_store_n(&amp;_M_i, __i, int(__m));</span></a>
+<a name="465"><span class="lineNum">     465 </span><span class="lineCov">        283 :       }</span></a>
 <a name="466"><span class="lineNum">     466 </span>            : </a>
 <a name="467"><span class="lineNum">     467 </span>            :       _GLIBCXX_ALWAYS_INLINE void</a>
 <a name="468"><span class="lineNum">     468 </span>            :       store(__int_type __i,</a>
@@ -543,11 +543,11 @@
 <a name="481"><span class="lineNum">     481 </span>            :       load(memory_order __m = memory_order_seq_cst) const noexcept</a>
 <a name="482"><span class="lineNum">     482 </span>            :       {</a>
 <a name="483"><span class="lineNum">     483 </span>            :         memory_order __b __attribute__ ((__unused__))</a>
-<a name="484"><span class="lineNum">     484 </span><span class="lineCov">        501 :           = __m &amp; __memory_order_mask;</span></a>
+<a name="484"><span class="lineNum">     484 </span><span class="lineCov">       1163 :           = __m &amp; __memory_order_mask;</span></a>
 <a name="485"><span class="lineNum">     485 </span>            :         __glibcxx_assert(__b != memory_order_release);</a>
 <a name="486"><span class="lineNum">     486 </span>            :         __glibcxx_assert(__b != memory_order_acq_rel);</a>
 <a name="487"><span class="lineNum">     487 </span>            : </a>
-<a name="488"><span class="lineNum">     488 </span><span class="lineCov">        501 :         return __atomic_load_n(&amp;_M_i, int(__m));</span></a>
+<a name="488"><span class="lineNum">     488 </span><span class="lineCov">       1163 :         return __atomic_load_n(&amp;_M_i, int(__m));</span></a>
 <a name="489"><span class="lineNum">     489 </span>            :       }</a>
 <a name="490"><span class="lineNum">     490 </span>            : </a>
 <a name="491"><span class="lineNum">     491 </span>            :       _GLIBCXX_ALWAYS_INLINE __int_type</a>

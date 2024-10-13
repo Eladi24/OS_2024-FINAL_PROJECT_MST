@@ -1,0 +1,534 @@
+        -:    0:Source:/usr/include/c++/11/bits/refwrap.h
+        -:    0:Graph:PipelineServer.gcno
+        -:    0:Data:PipelineServer.gcda
+        -:    0:Runs:2
+        -:    1:// Implementation of std::reference_wrapper -*- C++ -*-
+        -:    2:
+        -:    3:// Copyright (C) 2004-2021 Free Software Foundation, Inc.
+        -:    4://
+        -:    5:// This file is part of the GNU ISO C++ Library.  This library is free
+        -:    6:// software; you can redistribute it and/or modify it under the
+        -:    7:// terms of the GNU General Public License as published by the
+        -:    8:// Free Software Foundation; either version 3, or (at your option)
+        -:    9:// any later version.
+        -:   10:
+        -:   11:// This library is distributed in the hope that it will be useful,
+        -:   12:// but WITHOUT ANY WARRANTY; without even the implied warranty of
+        -:   13:// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+        -:   14:// GNU General Public License for more details.
+        -:   15:
+        -:   16:// Under Section 7 of GPL version 3, you are granted additional
+        -:   17:// permissions described in the GCC Runtime Library Exception, version
+        -:   18:// 3.1, as published by the Free Software Foundation.
+        -:   19:
+        -:   20:// You should have received a copy of the GNU General Public License and
+        -:   21:// a copy of the GCC Runtime Library Exception along with this program;
+        -:   22:// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+        -:   23:// <http://www.gnu.org/licenses/>.
+        -:   24:
+        -:   25:/** @file include/bits/refwrap.h
+        -:   26: *  This is an internal header file, included by other library headers.
+        -:   27: *  Do not attempt to use it directly. @headername{functional}
+        -:   28: */
+        -:   29:
+        -:   30:#ifndef _GLIBCXX_REFWRAP_H
+        -:   31:#define _GLIBCXX_REFWRAP_H 1
+        -:   32:
+        -:   33:#pragma GCC system_header
+        -:   34:
+        -:   35:#if __cplusplus < 201103L
+        -:   36:# include <bits/c++0x_warning.h>
+        -:   37:#else
+        -:   38:
+        -:   39:#include <bits/move.h>
+        -:   40:#include <bits/invoke.h>
+        -:   41:#include <bits/stl_function.h> // for unary_function and binary_function
+        -:   42:
+        -:   43:namespace std _GLIBCXX_VISIBILITY(default)
+        -:   44:{
+        -:   45:_GLIBCXX_BEGIN_NAMESPACE_VERSION
+        -:   46:
+        -:   47:  /// @cond undocumented
+        -:   48:
+        -:   49:  /**
+        -:   50:   * Derives from @c unary_function or @c binary_function, or perhaps
+        -:   51:   * nothing, depending on the number of arguments provided. The
+        -:   52:   * primary template is the basis case, which derives nothing.
+        -:   53:   */
+        -:   54:  template<typename _Res, typename... _ArgTypes>
+        -:   55:    struct _Maybe_unary_or_binary_function { };
+        -:   56:
+        -:   57:  /// Derives from @c unary_function, as appropriate.
+        -:   58:  template<typename _Res, typename _T1>
+        -:   59:    struct _Maybe_unary_or_binary_function<_Res, _T1>
+        -:   60:    : std::unary_function<_T1, _Res> { };
+        -:   61:
+        -:   62:  /// Derives from @c binary_function, as appropriate.
+        -:   63:  template<typename _Res, typename _T1, typename _T2>
+        -:   64:    struct _Maybe_unary_or_binary_function<_Res, _T1, _T2>
+        -:   65:    : std::binary_function<_T1, _T2, _Res> { };
+        -:   66:
+        -:   67:  template<typename _Signature>
+        -:   68:    struct _Mem_fn_traits;
+        -:   69:
+        -:   70:  template<typename _Res, typename _Class, typename... _ArgTypes>
+        -:   71:    struct _Mem_fn_traits_base
+        -:   72:    {
+        -:   73:      using __result_type = _Res;
+        -:   74:      using __maybe_type
+        -:   75:	= _Maybe_unary_or_binary_function<_Res, _Class*, _ArgTypes...>;
+        -:   76:      using __arity = integral_constant<size_t, sizeof...(_ArgTypes)>;
+        -:   77:    };
+        -:   78:
+        -:   79:#define _GLIBCXX_MEM_FN_TRAITS2(_CV, _REF, _LVAL, _RVAL)		\
+        -:   80:  template<typename _Res, typename _Class, typename... _ArgTypes>	\
+        -:   81:    struct _Mem_fn_traits<_Res (_Class::*)(_ArgTypes...) _CV _REF>	\
+        -:   82:    : _Mem_fn_traits_base<_Res, _CV _Class, _ArgTypes...>		\
+        -:   83:    {									\
+        -:   84:      using __vararg = false_type;					\
+        -:   85:    };									\
+        -:   86:  template<typename _Res, typename _Class, typename... _ArgTypes>	\
+        -:   87:    struct _Mem_fn_traits<_Res (_Class::*)(_ArgTypes... ...) _CV _REF>	\
+        -:   88:    : _Mem_fn_traits_base<_Res, _CV _Class, _ArgTypes...>		\
+        -:   89:    {									\
+        -:   90:      using __vararg = true_type;					\
+        -:   91:    };
+        -:   92:
+        -:   93:#define _GLIBCXX_MEM_FN_TRAITS(_REF, _LVAL, _RVAL)		\
+        -:   94:  _GLIBCXX_MEM_FN_TRAITS2(		, _REF, _LVAL, _RVAL)	\
+        -:   95:  _GLIBCXX_MEM_FN_TRAITS2(const		, _REF, _LVAL, _RVAL)	\
+        -:   96:  _GLIBCXX_MEM_FN_TRAITS2(volatile	, _REF, _LVAL, _RVAL)	\
+        -:   97:  _GLIBCXX_MEM_FN_TRAITS2(const volatile, _REF, _LVAL, _RVAL)
+        -:   98:
+        -:   99:_GLIBCXX_MEM_FN_TRAITS( , true_type, true_type)
+        -:  100:_GLIBCXX_MEM_FN_TRAITS(&, true_type, false_type)
+        -:  101:_GLIBCXX_MEM_FN_TRAITS(&&, false_type, true_type)
+        -:  102:
+        -:  103:#if __cplusplus > 201402L
+        -:  104:_GLIBCXX_MEM_FN_TRAITS(noexcept, true_type, true_type)
+        -:  105:_GLIBCXX_MEM_FN_TRAITS(& noexcept, true_type, false_type)
+        -:  106:_GLIBCXX_MEM_FN_TRAITS(&& noexcept, false_type, true_type)
+        -:  107:#endif
+        -:  108:
+        -:  109:#undef _GLIBCXX_MEM_FN_TRAITS
+        -:  110:#undef _GLIBCXX_MEM_FN_TRAITS2
+        -:  111:
+        -:  112:  /// If we have found a result_type, extract it.
+        -:  113:  template<typename _Functor, typename = __void_t<>>
+        -:  114:    struct _Maybe_get_result_type
+        -:  115:    { };
+        -:  116:
+        -:  117:  template<typename _Functor>
+        -:  118:    struct _Maybe_get_result_type<_Functor,
+        -:  119:				  __void_t<typename _Functor::result_type>>
+        -:  120:    { typedef typename _Functor::result_type result_type; };
+        -:  121:
+        -:  122:  /**
+        -:  123:   *  Base class for any function object that has a weak result type, as
+        -:  124:   *  defined in 20.8.2 [func.require] of C++11.
+        -:  125:  */
+        -:  126:  template<typename _Functor>
+        -:  127:    struct _Weak_result_type_impl
+        -:  128:    : _Maybe_get_result_type<_Functor>
+        -:  129:    { };
+        -:  130:
+        -:  131:  /// Retrieve the result type for a function type.
+        -:  132:  template<typename _Res, typename... _ArgTypes _GLIBCXX_NOEXCEPT_PARM>
+        -:  133:    struct _Weak_result_type_impl<_Res(_ArgTypes...) _GLIBCXX_NOEXCEPT_QUAL>
+        -:  134:    { typedef _Res result_type; };
+        -:  135:
+        -:  136:  /// Retrieve the result type for a varargs function type.
+        -:  137:  template<typename _Res, typename... _ArgTypes _GLIBCXX_NOEXCEPT_PARM>
+        -:  138:    struct _Weak_result_type_impl<_Res(_ArgTypes......) _GLIBCXX_NOEXCEPT_QUAL>
+        -:  139:    { typedef _Res result_type; };
+        -:  140:
+        -:  141:  /// Retrieve the result type for a function pointer.
+        -:  142:  template<typename _Res, typename... _ArgTypes _GLIBCXX_NOEXCEPT_PARM>
+        -:  143:    struct _Weak_result_type_impl<_Res(*)(_ArgTypes...) _GLIBCXX_NOEXCEPT_QUAL>
+        -:  144:    { typedef _Res result_type; };
+        -:  145:
+        -:  146:  /// Retrieve the result type for a varargs function pointer.
+        -:  147:  template<typename _Res, typename... _ArgTypes _GLIBCXX_NOEXCEPT_PARM>
+        -:  148:    struct
+        -:  149:    _Weak_result_type_impl<_Res(*)(_ArgTypes......) _GLIBCXX_NOEXCEPT_QUAL>
+        -:  150:    { typedef _Res result_type; };
+        -:  151:
+        -:  152:  // Let _Weak_result_type_impl perform the real work.
+        -:  153:  template<typename _Functor,
+        -:  154:	   bool = is_member_function_pointer<_Functor>::value>
+        -:  155:    struct _Weak_result_type_memfun
+        -:  156:    : _Weak_result_type_impl<_Functor>
+        -:  157:    { };
+        -:  158:
+        -:  159:  // A pointer to member function has a weak result type.
+        -:  160:  template<typename _MemFunPtr>
+        -:  161:    struct _Weak_result_type_memfun<_MemFunPtr, true>
+        -:  162:    {
+        -:  163:      using result_type = typename _Mem_fn_traits<_MemFunPtr>::__result_type;
+        -:  164:    };
+        -:  165:
+        -:  166:  // A pointer to data member doesn't have a weak result type.
+        -:  167:  template<typename _Func, typename _Class>
+        -:  168:    struct _Weak_result_type_memfun<_Func _Class::*, false>
+        -:  169:    { };
+        -:  170:
+        -:  171:  /**
+        -:  172:   *  Strip top-level cv-qualifiers from the function object and let
+        -:  173:   *  _Weak_result_type_memfun perform the real work.
+        -:  174:  */
+        -:  175:  template<typename _Functor>
+        -:  176:    struct _Weak_result_type
+        -:  177:    : _Weak_result_type_memfun<typename remove_cv<_Functor>::type>
+        -:  178:    { };
+        -:  179:
+        -:  180:#if __cplusplus <= 201703L
+        -:  181:  // Detect nested argument_type.
+        -:  182:  template<typename _Tp, typename = __void_t<>>
+        -:  183:    struct _Refwrap_base_arg1
+        -:  184:    { };
+        -:  185:
+        -:  186:  // Nested argument_type.
+        -:  187:  template<typename _Tp>
+        -:  188:    struct _Refwrap_base_arg1<_Tp,
+        -:  189:			      __void_t<typename _Tp::argument_type>>
+        -:  190:    {
+        -:  191:      typedef typename _Tp::argument_type argument_type;
+        -:  192:    };
+        -:  193:
+        -:  194:  // Detect nested first_argument_type and second_argument_type.
+        -:  195:  template<typename _Tp, typename = __void_t<>>
+        -:  196:    struct _Refwrap_base_arg2
+        -:  197:    { };
+        -:  198:
+        -:  199:  // Nested first_argument_type and second_argument_type.
+        -:  200:  template<typename _Tp>
+        -:  201:    struct _Refwrap_base_arg2<_Tp,
+        -:  202:			      __void_t<typename _Tp::first_argument_type,
+        -:  203:				       typename _Tp::second_argument_type>>
+        -:  204:    {
+        -:  205:      typedef typename _Tp::first_argument_type first_argument_type;
+        -:  206:      typedef typename _Tp::second_argument_type second_argument_type;
+        -:  207:    };
+        -:  208:
+        -:  209:  /**
+        -:  210:   *  Derives from unary_function or binary_function when it
+        -:  211:   *  can. Specializations handle all of the easy cases. The primary
+        -:  212:   *  template determines what to do with a class type, which may
+        -:  213:   *  derive from both unary_function and binary_function.
+        -:  214:  */
+        -:  215:  template<typename _Tp>
+        -:  216:    struct _Reference_wrapper_base
+        -:  217:    : _Weak_result_type<_Tp>, _Refwrap_base_arg1<_Tp>, _Refwrap_base_arg2<_Tp>
+        -:  218:    { };
+        -:  219:
+        -:  220:  // - a function type (unary)
+        -:  221:  template<typename _Res, typename _T1 _GLIBCXX_NOEXCEPT_PARM>
+        -:  222:    struct _Reference_wrapper_base<_Res(_T1) _GLIBCXX_NOEXCEPT_QUAL>
+        -:  223:    : unary_function<_T1, _Res>
+        -:  224:    { };
+        -:  225:
+        -:  226:  template<typename _Res, typename _T1>
+        -:  227:    struct _Reference_wrapper_base<_Res(_T1) const>
+        -:  228:    : unary_function<_T1, _Res>
+        -:  229:    { };
+        -:  230:
+        -:  231:  template<typename _Res, typename _T1>
+        -:  232:    struct _Reference_wrapper_base<_Res(_T1) volatile>
+        -:  233:    : unary_function<_T1, _Res>
+        -:  234:    { };
+        -:  235:
+        -:  236:  template<typename _Res, typename _T1>
+        -:  237:    struct _Reference_wrapper_base<_Res(_T1) const volatile>
+        -:  238:    : unary_function<_T1, _Res>
+        -:  239:    { };
+        -:  240:
+        -:  241:  // - a function type (binary)
+        -:  242:  template<typename _Res, typename _T1, typename _T2 _GLIBCXX_NOEXCEPT_PARM>
+        -:  243:    struct _Reference_wrapper_base<_Res(_T1, _T2) _GLIBCXX_NOEXCEPT_QUAL>
+        -:  244:    : binary_function<_T1, _T2, _Res>
+        -:  245:    { };
+        -:  246:
+        -:  247:  template<typename _Res, typename _T1, typename _T2>
+        -:  248:    struct _Reference_wrapper_base<_Res(_T1, _T2) const>
+        -:  249:    : binary_function<_T1, _T2, _Res>
+        -:  250:    { };
+        -:  251:
+        -:  252:  template<typename _Res, typename _T1, typename _T2>
+        -:  253:    struct _Reference_wrapper_base<_Res(_T1, _T2) volatile>
+        -:  254:    : binary_function<_T1, _T2, _Res>
+        -:  255:    { };
+        -:  256:
+        -:  257:  template<typename _Res, typename _T1, typename _T2>
+        -:  258:    struct _Reference_wrapper_base<_Res(_T1, _T2) const volatile>
+        -:  259:    : binary_function<_T1, _T2, _Res>
+        -:  260:    { };
+        -:  261:
+        -:  262:  // - a function pointer type (unary)
+        -:  263:  template<typename _Res, typename _T1 _GLIBCXX_NOEXCEPT_PARM>
+        -:  264:    struct _Reference_wrapper_base<_Res(*)(_T1) _GLIBCXX_NOEXCEPT_QUAL>
+        -:  265:    : unary_function<_T1, _Res>
+        -:  266:    { };
+        -:  267:
+        -:  268:  // - a function pointer type (binary)
+        -:  269:  template<typename _Res, typename _T1, typename _T2 _GLIBCXX_NOEXCEPT_PARM>
+        -:  270:    struct _Reference_wrapper_base<_Res(*)(_T1, _T2) _GLIBCXX_NOEXCEPT_QUAL>
+        -:  271:    : binary_function<_T1, _T2, _Res>
+        -:  272:    { };
+        -:  273:
+        -:  274:  template<typename _Tp, bool = is_member_function_pointer<_Tp>::value>
+        -:  275:    struct _Reference_wrapper_base_memfun
+        -:  276:    : _Reference_wrapper_base<_Tp>
+        -:  277:    { };
+        -:  278:
+        -:  279:  template<typename _MemFunPtr>
+        -:  280:    struct _Reference_wrapper_base_memfun<_MemFunPtr, true>
+        -:  281:    : _Mem_fn_traits<_MemFunPtr>::__maybe_type
+        -:  282:    {
+        -:  283:      using result_type = typename _Mem_fn_traits<_MemFunPtr>::__result_type;
+        -:  284:    };
+        -:  285:#endif // ! C++20
+        -:  286:
+        -:  287:  /// @endcond
+        -:  288:
+        -:  289:  /**
+        -:  290:   *  @brief Primary class template for reference_wrapper.
+        -:  291:   *  @ingroup functors
+        -:  292:   */
+        -:  293:  template<typename _Tp>
+        -:  294:    class reference_wrapper
+        -:  295:#if __cplusplus <= 201703L
+        -:  296:    // In C++20 std::reference_wrapper<T> allows T to be incomplete,
+        -:  297:    // so checking for nested types could result in ODR violations.
+        -:  298:    : public _Reference_wrapper_base_memfun<typename remove_cv<_Tp>::type>
+        -:  299:#endif
+        -:  300:    {
+        -:  301:      _Tp* _M_data;
+        -:  302:
+        -:  303:      _GLIBCXX20_CONSTEXPR
+        8:  304:      static _Tp* _S_fun(_Tp& __r) noexcept { return std::__addressof(__r); }
+------------------
+_ZNSt17reference_wrapperISt10unique_ptrI4TreeSt14default_deleteIS1_EEE6_S_funERS4_:
+function _ZNSt17reference_wrapperISt10unique_ptrI4TreeSt14default_deleteIS1_EEE6_S_funERS4_ called 2 returned 100% blocks executed 100%
+        2:  304:      static _Tp* _S_fun(_Tp& __r) noexcept { return std::__addressof(__r); }
+call    0 returned 100%
+------------------
+_ZNSt17reference_wrapperI10MSTFactoryE6_S_funERS0_:
+function _ZNSt17reference_wrapperI10MSTFactoryE6_S_funERS0_ called 2 returned 100% blocks executed 100%
+        2:  304:      static _Tp* _S_fun(_Tp& __r) noexcept { return std::__addressof(__r); }
+call    0 returned 100%
+------------------
+_ZNSt17reference_wrapperISt10unique_ptrI5GraphSt14default_deleteIS1_EEE6_S_funERS4_:
+function _ZNSt17reference_wrapperISt10unique_ptrI5GraphSt14default_deleteIS1_EEE6_S_funERS4_ called 2 returned 100% blocks executed 100%
+        2:  304:      static _Tp* _S_fun(_Tp& __r) noexcept { return std::__addressof(__r); }
+call    0 returned 100%
+------------------
+_ZNSt17reference_wrapperISt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS2_EESaIS5_EEE6_S_funERS7_:
+function _ZNSt17reference_wrapperISt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS2_EESaIS5_EEE6_S_funERS7_ called 2 returned 100% blocks executed 100%
+        2:  304:      static _Tp* _S_fun(_Tp& __r) noexcept { return std::__addressof(__r); }
+call    0 returned 100%
+------------------
+        -:  305:
+        -:  306:      static void _S_fun(_Tp&&) = delete;
+        -:  307:
+        -:  308:      template<typename _Up, typename _Up2 = __remove_cvref_t<_Up>>
+        -:  309:	using __not_same
+        -:  310:	  = typename enable_if<!is_same<reference_wrapper, _Up2>::value>::type;
+        -:  311:
+        -:  312:    public:
+        -:  313:      typedef _Tp type;
+        -:  314:
+        -:  315:      // _GLIBCXX_RESOLVE_LIB_DEFECTS
+        -:  316:      // 2993. reference_wrapper<T> conversion from T&&
+        -:  317:      // 3041. Unnecessary decay in reference_wrapper
+        -:  318:      template<typename _Up, typename = __not_same<_Up>, typename
+        -:  319:		= decltype(reference_wrapper::_S_fun(std::declval<_Up>()))>
+        -:  320:	_GLIBCXX20_CONSTEXPR
+        8:  321:	reference_wrapper(_Up&& __uref)
+        -:  322:	noexcept(noexcept(reference_wrapper::_S_fun(std::declval<_Up>())))
+        8:  323:	: _M_data(reference_wrapper::_S_fun(std::forward<_Up>(__uref)))
+        8:  324:	{ }
+------------------
+_ZNSt17reference_wrapperISt10unique_ptrI4TreeSt14default_deleteIS1_EEEC2IRS4_vPS4_EEOT_:
+function _ZNSt17reference_wrapperISt10unique_ptrI4TreeSt14default_deleteIS1_EEEC2IRS4_vPS4_EEOT_ called 2 returned 100% blocks executed 100%
+        2:  321:	reference_wrapper(_Up&& __uref)
+        -:  322:	noexcept(noexcept(reference_wrapper::_S_fun(std::declval<_Up>())))
+        2:  323:	: _M_data(reference_wrapper::_S_fun(std::forward<_Up>(__uref)))
+call    0 returned 100%
+call    1 returned 100%
+        2:  324:	{ }
+------------------
+_ZNSt17reference_wrapperI10MSTFactoryEC2IRS0_vPS0_EEOT_:
+function _ZNSt17reference_wrapperI10MSTFactoryEC2IRS0_vPS0_EEOT_ called 2 returned 100% blocks executed 100%
+        2:  321:	reference_wrapper(_Up&& __uref)
+        -:  322:	noexcept(noexcept(reference_wrapper::_S_fun(std::declval<_Up>())))
+        2:  323:	: _M_data(reference_wrapper::_S_fun(std::forward<_Up>(__uref)))
+call    0 returned 100%
+call    1 returned 100%
+        2:  324:	{ }
+------------------
+_ZNSt17reference_wrapperISt10unique_ptrI5GraphSt14default_deleteIS1_EEEC2IRS4_vPS4_EEOT_:
+function _ZNSt17reference_wrapperISt10unique_ptrI5GraphSt14default_deleteIS1_EEEC2IRS4_vPS4_EEOT_ called 2 returned 100% blocks executed 100%
+        2:  321:	reference_wrapper(_Up&& __uref)
+        -:  322:	noexcept(noexcept(reference_wrapper::_S_fun(std::declval<_Up>())))
+        2:  323:	: _M_data(reference_wrapper::_S_fun(std::forward<_Up>(__uref)))
+call    0 returned 100%
+call    1 returned 100%
+        2:  324:	{ }
+------------------
+_ZNSt17reference_wrapperISt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS2_EESaIS5_EEEC2IRS7_vPS7_EEOT_:
+function _ZNSt17reference_wrapperISt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS2_EESaIS5_EEEC2IRS7_vPS7_EEOT_ called 2 returned 100% blocks executed 100%
+        2:  321:	reference_wrapper(_Up&& __uref)
+        -:  322:	noexcept(noexcept(reference_wrapper::_S_fun(std::declval<_Up>())))
+        2:  323:	: _M_data(reference_wrapper::_S_fun(std::forward<_Up>(__uref)))
+call    0 returned 100%
+call    1 returned 100%
+        2:  324:	{ }
+------------------
+        -:  325:
+        -:  326:      reference_wrapper(const reference_wrapper&) = default;
+        -:  327:
+        -:  328:      reference_wrapper&
+        -:  329:      operator=(const reference_wrapper&) = default;
+        -:  330:
+        -:  331:      _GLIBCXX20_CONSTEXPR
+        8:  332:      operator _Tp&() const noexcept
+        8:  333:      { return this->get(); }
+------------------
+_ZNKSt17reference_wrapperISt10unique_ptrI4TreeSt14default_deleteIS1_EEEcvRS4_Ev:
+function _ZNKSt17reference_wrapperISt10unique_ptrI4TreeSt14default_deleteIS1_EEEcvRS4_Ev called 2 returned 100% blocks executed 100%
+        2:  332:      operator _Tp&() const noexcept
+        2:  333:      { return this->get(); }
+call    0 returned 100%
+------------------
+_ZNKSt17reference_wrapperI10MSTFactoryEcvRS0_Ev:
+function _ZNKSt17reference_wrapperI10MSTFactoryEcvRS0_Ev called 2 returned 100% blocks executed 100%
+        2:  332:      operator _Tp&() const noexcept
+        2:  333:      { return this->get(); }
+call    0 returned 100%
+------------------
+_ZNKSt17reference_wrapperISt10unique_ptrI5GraphSt14default_deleteIS1_EEEcvRS4_Ev:
+function _ZNKSt17reference_wrapperISt10unique_ptrI5GraphSt14default_deleteIS1_EEEcvRS4_Ev called 2 returned 100% blocks executed 100%
+        2:  332:      operator _Tp&() const noexcept
+        2:  333:      { return this->get(); }
+call    0 returned 100%
+------------------
+_ZNKSt17reference_wrapperISt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS2_EESaIS5_EEEcvRS7_Ev:
+function _ZNKSt17reference_wrapperISt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS2_EESaIS5_EEEcvRS7_Ev called 2 returned 100% blocks executed 100%
+        2:  332:      operator _Tp&() const noexcept
+        2:  333:      { return this->get(); }
+call    0 returned 100%
+------------------
+        -:  334:
+        -:  335:      _GLIBCXX20_CONSTEXPR
+        -:  336:      _Tp&
+        8:  337:      get() const noexcept
+        8:  338:      { return *_M_data; }
+------------------
+_ZNKSt17reference_wrapperISt10unique_ptrI4TreeSt14default_deleteIS1_EEE3getEv:
+function _ZNKSt17reference_wrapperISt10unique_ptrI4TreeSt14default_deleteIS1_EEE3getEv called 2 returned 100% blocks executed 100%
+        2:  337:      get() const noexcept
+        2:  338:      { return *_M_data; }
+------------------
+_ZNKSt17reference_wrapperI10MSTFactoryE3getEv:
+function _ZNKSt17reference_wrapperI10MSTFactoryE3getEv called 2 returned 100% blocks executed 100%
+        2:  337:      get() const noexcept
+        2:  338:      { return *_M_data; }
+------------------
+_ZNKSt17reference_wrapperISt10unique_ptrI5GraphSt14default_deleteIS1_EEE3getEv:
+function _ZNKSt17reference_wrapperISt10unique_ptrI5GraphSt14default_deleteIS1_EEE3getEv called 2 returned 100% blocks executed 100%
+        2:  337:      get() const noexcept
+        2:  338:      { return *_M_data; }
+------------------
+_ZNKSt17reference_wrapperISt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS2_EESaIS5_EEE3getEv:
+function _ZNKSt17reference_wrapperISt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS2_EESaIS5_EEE3getEv called 2 returned 100% blocks executed 100%
+        2:  337:      get() const noexcept
+        2:  338:      { return *_M_data; }
+------------------
+        -:  339:
+        -:  340:      template<typename... _Args>
+        -:  341:	_GLIBCXX20_CONSTEXPR
+        -:  342:	typename result_of<_Tp&(_Args&&...)>::type
+        -:  343:	operator()(_Args&&... __args) const
+        -:  344:	{
+        -:  345:#if __cplusplus > 201703L
+        -:  346:	  if constexpr (is_object_v<type>)
+        -:  347:	    static_assert(sizeof(type), "type must be complete");
+        -:  348:#endif
+        -:  349:	  return std::__invoke(get(), std::forward<_Args>(__args)...);
+        -:  350:	}
+        -:  351:    };
+        -:  352:
+        -:  353:#if __cpp_deduction_guides
+        -:  354:  template<typename _Tp>
+        -:  355:    reference_wrapper(_Tp&) -> reference_wrapper<_Tp>;
+        -:  356:#endif
+        -:  357:
+        -:  358:  /// @relates reference_wrapper @{
+        -:  359:
+        -:  360:  /// Denotes a reference should be taken to a variable.
+        -:  361:  template<typename _Tp>
+        -:  362:    _GLIBCXX20_CONSTEXPR
+        -:  363:    inline reference_wrapper<_Tp>
+        8:  364:    ref(_Tp& __t) noexcept
+        8:  365:    { return reference_wrapper<_Tp>(__t); }
+------------------
+_ZSt3refISt10unique_ptrI4TreeSt14default_deleteIS1_EEESt17reference_wrapperIT_ERS6_:
+function _ZSt3refISt10unique_ptrI4TreeSt14default_deleteIS1_EEESt17reference_wrapperIT_ERS6_ called 2 returned 100% blocks executed 100%
+        2:  364:    ref(_Tp& __t) noexcept
+        2:  365:    { return reference_wrapper<_Tp>(__t); }
+call    0 returned 100%
+------------------
+_ZSt3refI10MSTFactoryESt17reference_wrapperIT_ERS2_:
+function _ZSt3refI10MSTFactoryESt17reference_wrapperIT_ERS2_ called 2 returned 100% blocks executed 100%
+        2:  364:    ref(_Tp& __t) noexcept
+        2:  365:    { return reference_wrapper<_Tp>(__t); }
+call    0 returned 100%
+------------------
+_ZSt3refISt10unique_ptrI5GraphSt14default_deleteIS1_EEESt17reference_wrapperIT_ERS6_:
+function _ZSt3refISt10unique_ptrI5GraphSt14default_deleteIS1_EEESt17reference_wrapperIT_ERS6_ called 2 returned 100% blocks executed 100%
+        2:  364:    ref(_Tp& __t) noexcept
+        2:  365:    { return reference_wrapper<_Tp>(__t); }
+call    0 returned 100%
+------------------
+_ZSt3refISt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS2_EESaIS5_EEESt17reference_wrapperIT_ERS9_:
+function _ZSt3refISt6vectorISt10unique_ptrI12ActiveObjectSt14default_deleteIS2_EESaIS5_EEESt17reference_wrapperIT_ERS9_ called 2 returned 100% blocks executed 100%
+        2:  364:    ref(_Tp& __t) noexcept
+        2:  365:    { return reference_wrapper<_Tp>(__t); }
+call    0 returned 100%
+------------------
+        -:  366:
+        -:  367:  /// Denotes a const reference should be taken to a variable.
+        -:  368:  template<typename _Tp>
+        -:  369:    _GLIBCXX20_CONSTEXPR
+        -:  370:    inline reference_wrapper<const _Tp>
+        -:  371:    cref(const _Tp& __t) noexcept
+        -:  372:    { return reference_wrapper<const _Tp>(__t); }
+        -:  373:
+        -:  374:  template<typename _Tp>
+        -:  375:    void ref(const _Tp&&) = delete;
+        -:  376:
+        -:  377:  template<typename _Tp>
+        -:  378:    void cref(const _Tp&&) = delete;
+        -:  379:
+        -:  380:  /// std::ref overload to prevent wrapping a reference_wrapper
+        -:  381:  template<typename _Tp>
+        -:  382:    _GLIBCXX20_CONSTEXPR
+        -:  383:    inline reference_wrapper<_Tp>
+        -:  384:    ref(reference_wrapper<_Tp> __t) noexcept
+        -:  385:    { return __t; }
+        -:  386:
+        -:  387:  /// std::cref overload to prevent wrapping a reference_wrapper
+        -:  388:  template<typename _Tp>
+        -:  389:    _GLIBCXX20_CONSTEXPR
+        -:  390:    inline reference_wrapper<const _Tp>
+        -:  391:    cref(reference_wrapper<_Tp> __t) noexcept
+        -:  392:    { return { __t.get() }; }
+        -:  393:
+        -:  394:  /// @}
+        -:  395:
+        -:  396:_GLIBCXX_END_NAMESPACE_VERSION
+        -:  397:} // namespace std
+        -:  398:
+        -:  399:#endif // C++11
+        -:  400:
+        -:  401:#endif // _GLIBCXX_REFWRAP_H

@@ -71,7 +71,7 @@ class Graph {
          * @param v Destination vertex of the edge
          * @param w Weight of the edge
          */
-        virtual void addEdge(int u, int v, int w);
+        virtual bool addEdge(int u, int v, int w);
 
         bool removeEdge(int u, int v);
 

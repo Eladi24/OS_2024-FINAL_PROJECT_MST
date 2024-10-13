@@ -1,0 +1,34 @@
+        -:    0:Source:MSTFactory.hpp
+        -:    0:Graph:LFServer.gcno
+        -:    0:Data:LFServer.gcda
+        -:    0:Runs:2
+        -:    1:#ifndef MSTFACTORY_HPP
+        -:    2:#define MSTFACTORY_HPP
+        -:    3:#include <memory>
+        -:    4:#include "MSTStrategy.hpp"
+        -:    5:
+        -:    6:class MSTFactory
+        -:    7:{
+        -:    8:    private:
+        -:    9:        unique_ptr<MSTStrategy> _strategy;
+        -:   10:        
+        -:   11:    public:
+        -:   12:        /*
+        -:   13:        * @brief This method will set the strategy that will be used to find the minimum spanning tree.
+        -:   14:        * @param strategy The strategy that will be used to find the minimum spanning tree.
+        -:   15:        * @return void
+        -:   16:        */
+        -:   17:        void setStrategy(MSTStrategy* strategy);
+        -:   18:
+        -:   19:        /*
+        -:   20:        * @brief This method will create the minimum spanning tree of the graph g using the strategy set.
+        -:   21:        * @param g The graph that will be used to find the minimum spanning tree.
+        -:   22:        * @return Tree* The minimum spanning tree of the graph g.
+        -:   23:        */
+        -:   24:        unique_ptr<Tree> createMST(unique_ptr<Graph>& g);
+function _ZN10MSTFactory15destroyStrategyEv called 2 returned 100% blocks executed 100%
+        2:   25:        void destroyStrategy(){_strategy.reset();}
+call    0 returned 100%
+        -:   26:};
+        -:   27:
+        -:   28:#endif

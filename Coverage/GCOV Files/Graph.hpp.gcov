@@ -1,0 +1,105 @@
+        -:    0:Source:Graph.hpp
+        -:    0:Graph:LFServer.gcno
+        -:    0:Data:LFServer.gcda
+        -:    0:Runs:2
+        -:    1:#ifndef GRAPH_HPP
+        -:    2:#define GRAPH_HPP
+        -:    3:
+        -:    4:#include <iostream>
+        -:    5:#include <vector>
+        -:    6:#include <queue>
+        -:    7:#include <algorithm>
+        -:    8:#include <sstream>
+        -:    9:using namespace std;
+        -:   10:
+        -:   11:/**
+        -:   12: * @struct Edge
+        -:   13: * 
+        -:   14: * @brief Represents an edge in the graph.
+        -:   15: * 
+        -:   16: * This structure stores the source vertex, destination vertex, and the weight of the edge.
+        -:   17: */
+        -:   18:typedef struct Edge {
+        -:   19:    int src;    ///< Source vertex of the edge
+        -:   20:    int dest;   ///< Destination vertex of the edge
+        -:   21:    int weight; ///< Weight of the edge
+        -:   22:} Edge;
+        -:   23:
+        -:   24:/**
+        -:   25: * @class Graph
+        -:   26: * 
+        -:   27: * @brief Represents a graph using an adjacency list.
+        -:   28: * 
+        -:   29: * This class provides basic functionalities to create a graph, add edges, 
+        -:   30: * and access the graph's adjacency list.
+        -:   31: */
+        -:   32:class Graph {
+        -:   33:    protected:
+        -:   34:        int V; ///< Number of vertices in the graph
+        -:   35:        int E; ///< Number of edges in the graph
+        -:   36:        vector<vector<Edge>> adj; ///< Adjacency list representing the graph
+        -:   37:    
+        -:   38:    public:
+        -:   39:        /**
+        -:   40:         * @brief Default constructor for the Graph class.
+        -:   41:         * 
+        -:   42:         * Initializes an empty graph with 0 vertices and 0 edges.
+        -:   43:         */
+        -:   44:        Graph(): V(0), E(0) {}
+        -:   45:
+        -:   46:        /**
+        -:   47:         * @brief Parameterized constructor for the Graph class.
+        -:   48:         * 
+        -:   49:         * Initializes a graph with a given number of vertices and edges.
+        -:   50:         * 
+        -:   51:         * @param V Number of vertices
+        -:   52:         * @param E Number of edges
+        -:   53:         */
+function _ZN5GraphC2Eii called 2 returned 100% blocks executed 80%
+        2:   54:        Graph(int V, int E): V(V), E(E) { adj.resize(V); }
+call    0 returned 100%
+call    1 returned 100%
+branch  2 taken 100% (fallthrough)
+branch  3 taken 0% (throw)
+call    4 never executed
+        -:   55:
+        -:   56:        /**
+        -:   57:         * @brief Virtual destructor for the Graph class.
+        -:   58:         * 
+        -:   59:         * This is defined as `default` and is virtual to allow proper cleanup 
+        -:   60:         * in derived classes.
+        -:   61:         */
+        -:   62:        virtual ~Graph() = default;
+        -:   63:        
+        -:   64:        /**
+        -:   65:         * @brief Adds an edge to the graph.
+        -:   66:         * 
+        -:   67:         * This function adds an edge with a given source, destination, and weight 
+        -:   68:         * to the graph's adjacency list.
+        -:   69:         * 
+        -:   70:         * @param u Source vertex of the edge
+        -:   71:         * @param v Destination vertex of the edge
+        -:   72:         * @param w Weight of the edge
+        -:   73:         */
+        -:   74:        virtual bool addEdge(int u, int v, int w);
+        -:   75:
+        -:   76:        bool removeEdge(int u, int v);
+        -:   77:
+        -:   78:        /**
+        -:   79:         * @brief Returns the number of vertices in the graph.
+        -:   80:         * 
+        -:   81:         * @return int The number of vertices.
+        -:   82:         */
+function _ZNK5Graph17getVerticesNumberEv called 22 returned 100% blocks executed 100%
+       22:   83:        int getVerticesNumber() const { return V; }
+        -:   84:
+        -:   85:        /**
+        -:   86:         * @brief Returns the adjacency list of the graph.
+        -:   87:         * 
+        -:   88:         * @return const vector<vector<Edge>>& The adjacency list.
+        -:   89:         */
+function _ZNK5Graph6getAdjEv called 32 returned 100% blocks executed 100%
+       32:   90:        const vector<vector<Edge>>& getAdj() const { return adj; }
+        -:   91:};
+        -:   92:
+        -:   93:#endif
