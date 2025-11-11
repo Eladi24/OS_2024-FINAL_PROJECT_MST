@@ -1,3 +1,5 @@
+
+
 # 🕸️ Minimal Spanning Tree (MST) Project
 
 ## 📘 Introduction
@@ -122,3 +124,8 @@ For a detailed explanation of the project design, architecture, and results, ref
 
 ---
 
+## 🪪 License
+
+This project is released under the **MIT License** – free to use and modify for educational and learning purposes.
+
+---
