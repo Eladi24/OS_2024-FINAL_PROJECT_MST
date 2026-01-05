@@ -18,8 +18,6 @@ using namespace std;
  * 
  * The class is templated to allow for any type of function to be enqueued.
  * 
- * The class is not thread-safe for the enqueuing of tasks, but is thread-safe
- * for the execution of tasks.
  * 
  * The components of this pattern are:
  * Proxy: The interface that clients use to interact with the Active Object (a.k.a. Pipeline server)

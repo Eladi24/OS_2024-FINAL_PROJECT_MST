@@ -1,4 +1,6 @@
 #include "Reactor.hpp"
+#include <cstring>
+#include <cerrno>
 
 void Reactor::addHandle(int fd, function<void()> event)
 {

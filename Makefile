@@ -15,7 +15,7 @@ LIB_OBJ = $(LIB_SRC:.cpp=.o)
 # Tree Library target
 LIB_TARGET = libTree.so
 # Pipeline Server source files
-PIP_SRC = PipelineServer.cpp ActiveObject.cpp ServerConnection.cpp
+PIP_SRC = PipelineServer.cpp ActiveObject.cpp ServerConnection.cpp ServerLogger.cpp
 # Pipeline Server object files
 PIP_OBJ = $(PIP_SRC:.cpp=.o)
 
