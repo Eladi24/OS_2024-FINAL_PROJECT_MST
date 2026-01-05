@@ -15,10 +15,18 @@ int Reactor::handleEvents()
     int nready = select(_maxFd + 1, &readFds, nullptr, nullptr, nullptr);
 
     // If an error occurred in select
-    if (nready == -1 && errno != EINTR)
-    {
-        cerr << "Error in select" << endl;
-        return -1;
+    if (nready == -1) {
+        if (errno == EINTR) {
+            // Interrupted by signal (likely shutdown) - this is normal
+            return 0;
+        } else if (errno == EBADF) {
+            // Bad file descriptor - socket was closed (likely during shutdown)
+            // This is expected during shutdown, don't treat as error
+            return 0;
+        } else {
+            cerr << "Error in select: " << strerror(errno) << endl;
+            return -1;
+        }
     }
 
     // Check each file descriptor for events
@@ -27,7 +35,7 @@ int Reactor::handleEvents()
         // If the file descriptor is ready to read, call the event handler
         if (FD_ISSET(fd, &readFds))
         {
-            if (_handlers.find(fd) != _handlers.end())
+            if (_handlers.find(fd) != _handlers.end() && _handlers[fd])
             {
                 _handlers[fd]();
             }

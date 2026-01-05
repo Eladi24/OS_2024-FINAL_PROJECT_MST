@@ -1,4 +1,24 @@
 #include "LFThreadPool.hpp"
+#include <iomanip>
+#include <sstream>
+
+// ANSI color codes for thread logs
+const string THREAD_RESET = "\033[0m";
+const string THREAD_CYAN = "\033[36m";
+const string THREAD_GREEN = "\033[32m";
+const string THREAD_YELLOW = "\033[33m";
+const string THREAD_BLUE = "\033[34m";
+const string THREAD_MAGENTA = "\033[35m";
+const string THREAD_BOLD = "\033[1m";
+
+// Helper function to format thread ID (show last 4 hex digits)
+string formatThreadId(pthread_t id) {
+    stringstream ss;
+    // Convert pthread_t to uintptr_t for formatting (works on both Linux and macOS)
+    uintptr_t idValue = reinterpret_cast<uintptr_t>(id);
+    ss << hex << setfill('0') << setw(4) << (idValue & 0xFFFF);
+    return ss.str();
+}
 
 mutex LFThreadPool::_outputMx;
 LFThreadPool::LFThreadPool(size_t numThreads, Reactor& reactor)
@@ -13,7 +33,10 @@ LFThreadPool::LFThreadPool(size_t numThreads, Reactor& reactor)
         _followers[i]->createThread(bind(&LFThreadPool::followerLoop, this, i));
         {
             unique_lock<mutex> guard(_outputMx);
-            cout << "[INFO] Following thread created: " << _followers[i]->getId() << endl;
+            cout << THREAD_GREEN << "🧵 [THREAD] " << THREAD_RESET 
+                 << "Thread #" << (i+1) << " created " << THREAD_CYAN 
+                 << "(ID: 0x" << formatThreadId(_followers[i]->getId()) << ")" 
+                 << THREAD_RESET << endl;
         }
     }
     // Promote the initial leader
@@ -24,11 +47,16 @@ LFThreadPool::~LFThreadPool()
 {
     {
         unique_lock<mutex> guard(_outputMx);
-        cout << "[INFO] LFThreadPool destructor" << endl;
+        cout << THREAD_YELLOW << "🗑️  [POOL] " << THREAD_RESET 
+             << "Thread pool destructor called" << THREAD_RESET << endl;
     }
     
-    stopPool();
-    // Clean the allocated resources
+    // Only stop if not already stopped
+    if (!_stop.load(memory_order_acquire)) {
+        stopPool();
+    }
+    
+    // Clean the allocated resources (followers are already reset in join())
     _followers.clear();
     _leader.reset();
 }
@@ -40,7 +68,10 @@ void LFThreadPool::promoteNewLeader()
     {
         {
             unique_lock<mutex> guard(_outputMx);
-            cout << "[INFO] Promoting new leader: " << _followers.begin()->get()->getId() << endl;
+            cout << THREAD_MAGENTA << "👑 [LEADER] " << THREAD_RESET 
+                 << "Promoting initial leader " << THREAD_CYAN 
+                 << "(ID: 0x" << formatThreadId(_followers.begin()->get()->getId()) << ")" 
+                 << THREAD_RESET << endl;
         }
         _leader = *_followers.begin();
         // Wake up the new leader to handle events
@@ -55,7 +86,10 @@ void LFThreadPool::promoteNewLeader()
         {
             {
                 unique_lock<mutex> guard(_outputMx);
-                cout << "[INFO] Promoting new leader: " << follower->getId() << endl;
+                cout << THREAD_MAGENTA << "👑 [LEADER] " << THREAD_RESET 
+                     << "New leader promoted " << THREAD_CYAN 
+                     << "(ID: 0x" << formatThreadId(follower->getId()) << ")" 
+                     << THREAD_RESET << endl;
             }
             _leader = follower;
             // Wake up the new leader to handle events
@@ -74,7 +108,9 @@ void LFThreadPool::followerLoop(int id)
         _followers[id]->conditionWait(_stop);
         {
             unique_lock<mutex> guard(_outputMx);
-            cout << "[INFO] Thread: " << _followers[id]->getId() << " woke up" << endl;
+            cout << THREAD_BLUE << "⏰ [WAKE] " << THREAD_RESET 
+                 << "Thread " << THREAD_CYAN << "0x" << formatThreadId(_followers[id]->getId()) 
+                 << THREAD_RESET << " woke up" << endl;
         }
         
         // If stop then the program is shutting down
@@ -84,15 +120,26 @@ void LFThreadPool::followerLoop(int id)
         // Handle events in the reactor
         _reactor.handleEvents();
         
+        // Check again after handleEvents (might have been set during select)
+        if (_stop.load(memory_order_acquire))
+            break;
+        
         // Promote a new leader and execute the event
         shared_ptr<ThreadContext> currThread = _leader;
+        if (!currThread) {
+            break;  // No leader available, exit
+        }
         promoteNewLeader();
 
-        // Execute events in the thread context
-        currThread->executeEvent();
+        // Execute events in the thread context (only if not shutting down)
+        if (!_stop.load(memory_order_acquire)) {
+            currThread->executeEvent();
+        }
         {
             unique_lock<mutex> guard(_outputMx);
-            cout << "[INFO] Thread: " << currThread->getId() << " is returning to sleep" << endl;
+            cout << THREAD_YELLOW << "😴 [SLEEP] " << THREAD_RESET 
+                 << "Thread " << THREAD_CYAN << "0x" << formatThreadId(currThread->getId()) 
+                 << THREAD_RESET << " returning to sleep" << endl;
         }
         // Put the thread to sleep
         currThread->sleep();
@@ -121,14 +168,24 @@ void LFThreadPool::join()
 {   
     for (auto & follower : _followers)
     {
+        if (!follower) {
+            continue;  // Skip if already reset
+        }
+        
         pthread_t id = follower->getId();
         {
             unique_lock<mutex> guard(_outputMx);
-            cout << "[INFO] Joining thread: " << id << endl;
+            cout << THREAD_YELLOW << "🛑 [JOIN] " << THREAD_RESET 
+                 << "Joining thread " << THREAD_CYAN << "0x" << formatThreadId(id) 
+                 << THREAD_RESET << endl;
         }
         // Cancel the thread and join it
-        follower->cancel();
-        follower->join();
+        try {
+            follower->cancel();
+            follower->join();
+        } catch (...) {
+            // Ignore exceptions during shutdown
+        }
         follower.reset();
     }
 }

@@ -3,27 +3,25 @@
 
 #include <limits.h>
 #include "Graph.hpp"
-#include <queue>
 #include <utility>
 #include <vector>
 
 class Tree : public Graph
 {
     private:
-        vector<vector<int>> distanceMap; ///< Stores distances between all pairs of vertices for the Floyd-Warshall algorithm.
+        vector<vector<int>> distanceMap; ///< Stores distances between all pairs of vertices computed using DFS.
 
         /**
          * @brief Performs a depth-first search (DFS) to calculate distances from a node.
          * 
          * This function calculates the distance of all nodes from a given
-         * starting node using DFS and updates the distance and parent tracking vectors.
+         * starting node using DFS and updates the distance vector.
          * 
          * @param node The current node being visited.
          * @param parent The parent node of the current node.
          * @param dist A reference to a vector that stores distances from the start node.
-         * @param parentTrack A reference to a vector that tracks the parents of each vertex.
          */
-        void dfs(int node, int parent, vector<int>& dist, vector<int>& parentTrack);
+        void dfs(int node, int parent, vector<int>& dist);
 
         /**
          * @brief Finds the farthest node from a given starting node.
@@ -37,24 +35,15 @@ class Tree : public Graph
         pair<int, int> farthestNode(int start);
 
         /**
-         * @brief Implements Dijkstra's algorithm to find the shortest paths from a source vertex.
+         * @brief Computes all-pairs shortest paths optimized for trees.
          * 
-         * This function computes the shortest path from a given source vertex to all other vertices
-         * using Dijkstra's algorithm. It returns the distance vector and updates the parent tracking vector.
-         * 
-         * @param src The source vertex.
-         * @param parentTrack A reference to a vector that tracks the parents of each vertex.
-         * @return vector<int> The vector of shortest distances from the source vertex.
-         */
-        vector<int> dijkstra(int src, vector<int> &parentTrack);
-
-        /**
-         * @brief Implements Floyd-Warshall algorithm to compute all-pairs shortest paths.
+         * For trees, we use DFS from each vertex (O(V²)) instead of Floyd-Warshall (O(V³)),
+         * since there's exactly one path between any two vertices. This is much more efficient!
          * 
          * This function calculates the shortest paths between all pairs of vertices in the tree
          * and stores the results in a distance matrix.
          */
-        void floydWarshall();
+        void computeAllPairsDistances();
 
         /**
          * @brief Initializes the Tree with a given set of edges.
@@ -137,22 +126,6 @@ class Tree : public Graph
  * @return string A formatted string representing the shortest path and its total weight.
  */
 string shortestPath();
-
-
-        /**
-         * @brief Reconstructs the shortest path from source to destination.
-         * 
-         * This function backtracks using the parent tracking vector to reconstruct the shortest
-         * path from the source to the destination vertex. It returns a formatted string that
-         * includes the path and its total weight.
-         * 
-         * @param src The source vertex.
-         * @param dest The destination vertex.
-         * @param parentTrack The vector tracking the parent of each vertex.
-         * @param totalWeight The total weight of the path.
-         * @return string A formatted string representing the shortest path and its total weight.
-         */
-        string reconstructPath(int src, int dest, const vector<int> &parentTrack, int totalWeight);
 
         /**
          * @brief Adds an edge to the tree.

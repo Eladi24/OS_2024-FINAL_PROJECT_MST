@@ -15,11 +15,11 @@ LIB_OBJ = $(LIB_SRC:.cpp=.o)
 # Tree Library target
 LIB_TARGET = libTree.so
 # Pipeline Server source files
-PIP_SRC = PipelineServer.cpp ActiveObject.cpp
+PIP_SRC = PipelineServer.cpp ActiveObject.cpp ServerConnection.cpp
 # Pipeline Server object files
 PIP_OBJ = $(PIP_SRC:.cpp=.o)
 
-LF_SRC = LFServer.cpp LFThreadPool.cpp Reactor.cpp ThreadContext.cpp
+LF_SRC = LFServer.cpp LFThreadPool.cpp Reactor.cpp ThreadContext.cpp ServerLogger.cpp
 LF_OBJ = $(LF_SRC:.cpp=.o)
 
 # Compile
@@ -87,3 +87,5 @@ clear:
 clean:
 	rm -f *.o *.so *.gcda *.gcno *.gcov *.info PipelineServer LFServer pipeline-valgrind-out.txt pipeline-helgrind-out.txt \
 	lf-valgrind-out.txt lf-helgrind-out.txt
+	find . -name "*.gcda" -type f -delete
+	find . -name "*.gcno" -type f -delete
