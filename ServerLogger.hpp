@@ -47,6 +47,7 @@ public:
   
   // Server startup banner
   static void printServerBanner(int port, int socket, mutex& lock);
+  static void printPipelineServerBanner(int port, int socket, int pipelineSize, mutex& lock);
   
   // Client communication (takes send callback to avoid socket dependency)
   static void sendWelcomeMessage(int clientSock, void (*sendFunc)(int, const string&));

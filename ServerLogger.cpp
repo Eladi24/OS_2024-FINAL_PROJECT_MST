@@ -152,6 +152,35 @@ void ServerLogger::printServerBanner(int port, int socket, mutex& lock) {
        << endl;
 }
 
+void ServerLogger::printPipelineServerBanner(int port, int socket, int pipelineSize, mutex& lock) {
+  unique_lock<mutex> guard(lock);
+  cout << "\n" << BOLD << BLUE
+       << "╔═══════════════════════════════════════════════════════╗" << RESET
+       << endl;
+  cout << BOLD << BLUE << "║" << RESET << "  " << GREEN << BOLD
+       << "🚀 Graph Computation Server (Pipeline/Active Object)" << RESET << "  "
+       << BOLD << BLUE << "║" << RESET << endl;
+  cout << BOLD << BLUE
+       << "╠═══════════════════════════════════════════════════════╣" << RESET
+       << endl;
+  cout << BOLD << BLUE << "║" << RESET << "  " << CYAN << "📍 Port: " << BOLD
+       << port << RESET << "                                    " 
+       << BOLD << BLUE << "║" << RESET << endl;
+  cout << BOLD << BLUE << "║" << RESET << "  " << CYAN
+       << "🔌 Socket: " << socket << RESET
+       << "                                  " << BOLD << BLUE 
+       << "║" << RESET << endl;
+  cout << BOLD << BLUE << "║" << RESET << "  " << MAGENTA
+       << "⚙️  Pipeline: " << pipelineSize << " ActiveObject stages" << RESET 
+       << "              " << BOLD << BLUE << "║" << RESET << endl;
+  cout << BOLD << BLUE << "║" << RESET << "  " << YELLOW
+       << "⏳ Waiting for connections..." << RESET << "                    "
+       << BOLD << BLUE << "║" << RESET << endl;
+  cout << BOLD << BLUE
+       << "╚═══════════════════════════════════════════════════════╝" << RESET
+       << "\n" << endl;
+}
+
 void ServerLogger::sendWelcomeMessage(int clientSock, void (*sendFunc)(int, const string&)) {
   sendFunc(clientSock, formatWelcomeMessage());
 }

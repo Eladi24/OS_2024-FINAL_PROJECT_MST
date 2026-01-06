@@ -85,5 +85,5 @@ void sendResponse(int clientSock, const std::string& response,
   }
 }
 
-} // namespace ServerConnection
+} 
 

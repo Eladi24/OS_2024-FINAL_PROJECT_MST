@@ -13,21 +13,19 @@
 #include <unistd.h>
 
 // Constants
-const int port = 4050; ///< Server port number
-const int PIPELINE_SIZE = 7; ///< Number of ActiveObject stages in pipeline
-const int BUFFER_SIZE = 1024; ///< Buffer size for receiving client data
+const int port = 4050; 
+const int PIPELINE_SIZE = 7;
+const int BUFFER_SIZE = 1024; 
 
 // Global variables
 function<void(int)>
-    signalHandlerLambda;     ///< Lambda function for handling signals
-atomic<int> clientNumber(0); ///< Tracks the number of connected clients
-mutex graphLock;             ///< Mutex for synchronizing access to the graph
-mutex futureLock; ///< Mutex for synchronizing access to shared futures
-mutex &coutLock =
-    ActiveObject::getOutputMutex(); ///< Mutex for synchronizing console output
+    signalHandlerLambda;     
+atomic<int> clientNumber(0); 
+mutex graphLock;        
+mutex futureLock; 
+mutex &coutLock =ActiveObject::getOutputMutex();
 
-atomic<bool>
-    terminateFlag(false); ///< Flag to signal the termination of the server
+atomic<bool>terminateFlag(false); 
 
 /**
  * @struct functArgs
@@ -35,15 +33,15 @@ atomic<bool>
  * @brief Holds arguments for thread functions handling client commands.
  *
  * This struct contains references to the client's socket, the pipeline of
- * ActiveObjects, the graph, the MST factory, and the resulting MST.
+ * ActiveObjects, smart pointers to the graph and MST, and the MST factory.
  */
 struct functArgs {
-  int clientSock; ///< The client's socket descriptor
+  int clientSock; 
   vector<unique_ptr<ActiveObject>>
-      &pipeline;         ///< Pipeline of ActiveObjects for task execution
-  unique_ptr<Graph> &g;  ///< Reference to the graph object
-  MSTFactory &factory;   ///< Reference to the MST factory
-  unique_ptr<Tree> &mst; ///< Reference to the MST (Tree) object
+      &pipeline;         
+  unique_ptr<Graph> &g;  
+  MSTFactory &factory;   
+  unique_ptr<Tree> &mst; 
 };
 
 /**
@@ -321,31 +319,26 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
     string future;
 
     if (cmd == "Newgraph") {
-      // ========== SERVER RESPONSIBILITY: Comprehensive Input Validation ==========
+
       int n, m;
       vector<tuple<int, int, int>> edges;
       string errorMsg;
-      
-      // Single function handles all validation: parse, validate constraints, read edges
+
       if (!validateAndReadNewgraph(clientSock, ss, ssLock, buffer, bytesReceived,
                                     n, m, edges, errorMsg)) {
-        // SERVER ERROR: Validation failed (format, constraints, or I/O)
+
         ServerConnection::sendResponse(clientSock, errorMsg, coutLock);
         continue;
       }
 
-      // ========== SERVER: Enqueue to ActiveObject ==========
       pipeline[0]->enqueue([&g, &mst, edges, n, m, &future, &done, &cv, clientSock]() {
-        // ========== ACTIVEOBJECT RESPONSIBILITY: Graph Operations ==========
+
         unique_lock<mutex> graphGuard(graphLock);
         
-        // ACTIVEOBJECT: Reset graph and MST
         resetGraphAndMST(g, mst);
 
-        // ACTIVEOBJECT: Create new graph
         g = make_unique<Graph>(n, m);
 
-        // ACTIVEOBJECT: Add all edges (business logic - edge validation happens in addEdge)
         for (const auto& [u, v, w] : edges) {
           g->addEdge(u, v, w);  // addEdge validates internally
         }
@@ -359,10 +352,9 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
       });
 
     } else if (cmd == "AddEdge") {
-      // ========== SERVER RESPONSIBILITY: Input Parsing & Format Validation ==========
       int u = 0, v = 0, w = 0;
       if (!(ss >> u >> v >> w)) {
-        // SERVER ERROR: Invalid input format
+
         ServerConnection::sendResponse(clientSock,
                                        "Invalid ADD_EDGE input. Please provide "
                                        "integers for u, v, and w.\n",
@@ -370,12 +362,10 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
         continue;
       }
 
-      // ========== SERVER: Enqueue to ActiveObject ==========
       pipeline[0]->enqueue([&g, u, v, w, &future, &done, &cv, clientSock]() {
-        // ========== ACTIVEOBJECT RESPONSIBILITY: Graph Operations & Errors ==========
+
         unique_lock<mutex> graphGuard(graphLock);
-        
-        // ACTIVEOBJECT: Validate graph state
+
         if (!isGraphValid(g)) {
           setResponseAndSignal("Graph not initialized.\n", future, done, cv);
           return;
@@ -391,17 +381,16 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
           setResponseAndSignal("Edge added between vertices " + to_string(u) + " and " +
                                to_string(v) + " with weight " + to_string(w) + ".\n",
                                future, done, cv);
-          // Log edge addition (outside lock to avoid deadlock)
           ServerLogger::logEdgeAdded(clientSock, u, v, w, coutLock);
         }
       });
     }
-    // Adding REMOVE_EDGE command handling
+
     else if (cmd == "RemoveEdge") {
-      // ========== SERVER RESPONSIBILITY: Input Parsing & Format Validation ==========
+
       int u = 0, v = 0;
       if (!(ss >> u >> v)) {
-        // SERVER ERROR: Invalid input format
+
         ServerConnection::sendResponse(
             clientSock,
             "Invalid REMOVE_EDGE input. Please provide "
@@ -410,21 +399,18 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
         continue;
       }
 
-      // ========== SERVER: Enqueue to ActiveObject ==========
       pipeline[0]->enqueue([&g, u, v, &future, &done, &cv, clientSock]() {
-        // ========== ACTIVEOBJECT RESPONSIBILITY: Graph Operations & Errors ==========
+
         unique_lock<mutex> graphGuard(graphLock);
         
-        // ACTIVEOBJECT: Validate graph state
+
         if (!isGraphValid(g)) {
           setResponseAndSignal("Graph not initialized.\n", future, done, cv);
           return;
         }
         
-        // ACTIVEOBJECT: Perform operation
         bool success = g->removeEdge(u, v);
         
-        // ACTIVEOBJECT: Handle business logic errors
         if (!success) {
           setResponseAndSignal("Edge between vertices " + to_string(u) + " and " +
                                to_string(v) + " does not exist.\n", future, done, cv);
@@ -438,14 +424,13 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
     }
 
     else if (cmd == "Prim" || cmd == "Kruskal") {
-      // ========== SERVER: Enqueue to ActiveObject (no input parsing needed) ==========
+
       pipeline[1]->enqueue([&g, cmd, &factory, &mst, &future, &done, &cv,
                             &pipeline, clientSock]() {
-        // ========== ACTIVEOBJECT RESPONSIBILITY: Graph Operations & Errors ==========
-        // ACTIVEOBJECT: Try to acquire lock (non-blocking for this operation)
+
         unique_lock<mutex> graphGuard(graphLock, try_to_lock);
         if (!graphGuard.owns_lock()) {
-          // ACTIVEOBJECT ERROR: Graph is busy (concurrency issue)
+
           setResponseAndSignal("Graph is being used by another thread. Cannot search for "
                                "MST using " + cmd + ".\n", future, done, cv);
           return;
@@ -476,8 +461,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
           mst = factory.createMST(g);
           appendToResponse("MST created using " + cmd + " algorithm.\n", future);
           appendToResponse(mst->printMST(), future);
-          // Log MST computation (outside lock to avoid deadlock)
-          ServerLogger::logMSTComputed(clientSock, cmd, coutLock);
+
           pipeline[3]->enqueue([&mst, &future, &done, &cv, &pipeline]() {
             {
               unique_lock<mutex> graphGuard(graphLock);
@@ -530,12 +514,8 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
       continue;
     }
 
-    // ========== SERVER: Wait for async operation completion and send response ==========
-    // Only reaches here if command enqueued an async operation
-    // ActiveObject sets future and done when operation completes
     waitAndSendResponse(clientSock, future, done, cv);
   }
-
 
   shutdown(clientSock, SHUT_RDWR);
   close(clientSock);
@@ -554,7 +534,6 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
  */
 int main() {
   signal(SIGINT, signalHandler);
-  vector<thread> threads;
   vector<unique_ptr<ActiveObject>> pipeline;
   unique_ptr<Graph> g;
   MSTFactory factory;
@@ -563,21 +542,21 @@ int main() {
   unique_ptr<functArgs> faPtr;
 
   signalHandlerLambda = [&](int signum) {
+
     for (auto &thread : clientThreads) {
       pthread_cancel(thread);
       pthread_join(thread, nullptr);
     }
-    clientThreads.clear();
-    clientThreads.shrink_to_fit();
+    
     faPtr.reset();
     factory.destroyStrategy();
     mst.reset();
     g.reset();
+    
     for (auto &obj : pipeline) {
       obj.reset();
     }
-    pipeline.clear();
-    pipeline.shrink_to_fit();
+
   };
 
   // Create server socket using connection utilities
@@ -588,39 +567,7 @@ int main() {
   }
 
   // Print server startup banner
-  {
-    unique_lock<mutex> guard(coutLock);
-    cout << "\n" << ServerLogger::BOLD << ServerLogger::BLUE
-         << "╔═══════════════════════════════════════════════════════╗" << ServerLogger::RESET
-         << endl;
-    cout << ServerLogger::BOLD << ServerLogger::BLUE << "║" << ServerLogger::RESET << "  " 
-         << ServerLogger::GREEN << ServerLogger::BOLD
-         << "🚀 Graph Computation Server (Pipeline/Active Object)" << ServerLogger::RESET << "  "
-         << ServerLogger::BOLD << ServerLogger::BLUE << "║" << ServerLogger::RESET << endl;
-    cout << ServerLogger::BOLD << ServerLogger::BLUE
-         << "╠═══════════════════════════════════════════════════════╣" << ServerLogger::RESET
-         << endl;
-    cout << ServerLogger::BOLD << ServerLogger::BLUE << "║" << ServerLogger::RESET << "  " 
-         << ServerLogger::CYAN << "📍 Port: " << ServerLogger::BOLD
-         << port << ServerLogger::RESET << "                                    " 
-         << ServerLogger::BOLD << ServerLogger::BLUE << "║" << ServerLogger::RESET << endl;
-    cout << ServerLogger::BOLD << ServerLogger::BLUE << "║" << ServerLogger::RESET << "  " 
-         << ServerLogger::CYAN
-         << "🔌 Socket: " << serverSock << ServerLogger::RESET
-         << "                                  " << ServerLogger::BOLD << ServerLogger::BLUE 
-         << "║" << ServerLogger::RESET << endl;
-    cout << ServerLogger::BOLD << ServerLogger::BLUE << "║" << ServerLogger::RESET << "  " 
-         << ServerLogger::MAGENTA
-         << "⚙️  Pipeline: " << PIPELINE_SIZE << " ActiveObject stages" << ServerLogger::RESET 
-         << "              " << ServerLogger::BOLD << ServerLogger::BLUE << "║" << ServerLogger::RESET << endl;
-    cout << ServerLogger::BOLD << ServerLogger::BLUE << "║" << ServerLogger::RESET << "  " 
-         << ServerLogger::YELLOW
-         << "⏳ Waiting for connections..." << ServerLogger::RESET << "                    "
-         << ServerLogger::BOLD << ServerLogger::BLUE << "║" << ServerLogger::RESET << endl;
-    cout << ServerLogger::BOLD << ServerLogger::BLUE
-         << "╚═══════════════════════════════════════════════════════╝" << ServerLogger::RESET
-         << "\n" << endl;
-  }
+  ServerLogger::printPipelineServerBanner(port, serverSock, PIPELINE_SIZE, coutLock);
 
   for (int i = 0; i < PIPELINE_SIZE; i++) {
     pipeline.push_back(make_unique<ActiveObject>());

@@ -5,7 +5,7 @@
 #include <mutex>
 #include <string>
 
-// Forward declarations
+
 class ActiveObject;
 
 /**
