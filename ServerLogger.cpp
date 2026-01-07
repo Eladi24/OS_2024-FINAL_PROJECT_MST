@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <iomanip>
 #include <sstream>
+#include <thread>
 
 // Color constants
 const string ServerLogger::RESET = "\033[0m";
@@ -86,10 +87,24 @@ void ServerLogger::logClientClosed(int socket, mutex& lock) {
   cout << CYAN << "  ✓ Closed client socket: " << socket << RESET << endl;
 }
 
+void ServerLogger::logWake(int stageId, mutex& lock) {
+  unique_lock<mutex> guard(lock);
+  stringstream ss;
+  ss << hex << this_thread::get_id();
+  cout << YELLOW << "⏰ [WAKE] " << RESET << "Pipeline Stage " << stageId 
+       << " worker thread woke up (ID: 0x" << ss.str() << ")" << RESET << endl;
+}
+
+void ServerLogger::logSleep(int stageId, mutex& lock) {
+  unique_lock<mutex> guard(lock);
+  stringstream ss;
+  ss << hex << this_thread::get_id();
+  cout << CYAN << "😴 [SLEEP] " << RESET << "Pipeline Stage " << stageId 
+       << " worker thread returning to sleep (ID: 0x" << ss.str() << ")" << RESET << endl;
+}
+
 string ServerLogger::formatWelcomeMessage() {
-  return "╔═══════════════════════════════════════════════════════╗\n"
-         "║     🚀 Welcome to the Graph Computation Server! 🚀     ║\n"
-         "╚═══════════════════════════════════════════════════════╝\n\n"
+  return "🚀 Welcome to the Graph Computation Server! 🚀\n\n"
          "📋 Available Commands:\n"
          "  📊 Newgraph n m     - Create a new graph with n vertices and m edges\n"
          "                        (followed by m lines of: u v w)\n"
@@ -97,10 +112,8 @@ string ServerLogger::formatWelcomeMessage() {
          "  ➖ RemoveEdge u v   - Remove the edge from u to v\n"
          "  🔍 Prim             - Compute MST using Prim's algorithm\n"
          "  🔍 Kruskal          - Compute MST using Kruskal's algorithm\n"
-         "  👋 Exit             - Disconnect from server\n\n"
-         "ℹ️  Note: The graph is shared among all clients.\n"
-         "📢 You will be notified when other clients modify the graph.\n\n"
-         "═══════════════════════════════════════════════════════\n\n";
+         "  👋 Exit             - Disconnect from server\n"
+         "─────────────────────────────────────────────────────────────\n\n";
 }
 
 string ServerLogger::formatMSTStats(int totalWeight, int diameter, double avgDist, const string& shortestPath) {
@@ -124,61 +137,22 @@ string ServerLogger::formatMSTStats(int totalWeight, int diameter, double avgDis
 
 void ServerLogger::printServerBanner(int port, int socket, mutex& lock) {
   unique_lock<mutex> guard(lock);
-  cout << "\n" << BOLD << BLUE
-       << "╔═══════════════════════════════════════════════════════╗" << RESET
-       << endl;
-  cout << BOLD << BLUE << "║" << RESET << "  " << GREEN << BOLD
-       << "🚀 Graph Computation Server (Leader-Follower)" << RESET << "  "
-       << BOLD << BLUE << "║" << RESET << endl;
-  cout << BOLD << BLUE
-       << "╠═══════════════════════════════════════════════════════╣" << RESET
-       << endl;
-  cout << BOLD << BLUE << "║" << RESET << "  " << CYAN << "📍 Port: " << BOLD
-       << port << RESET << "                                    " << BOLD
-       << BLUE << "║" << RESET << endl;
-  cout << BOLD << BLUE << "║" << RESET << "  " << CYAN
-       << "🔌 Socket: " << socket << RESET
-       << "                                  " << BOLD << BLUE << "║" << RESET
-       << endl;
-  cout << BOLD << BLUE << "║" << RESET << "  " << MAGENTA
-       << "👥 Thread Pool: 10 threads" << RESET << "                        "
-       << BOLD << BLUE << "║" << RESET << endl;
-  cout << BOLD << BLUE << "║" << RESET << "  " << YELLOW
-       << "⏳ Waiting for connections..." << RESET << "                    "
-       << BOLD << BLUE << "║" << RESET << endl;
-  cout << BOLD << BLUE
-       << "╚═══════════════════════════════════════════════════════╝" << RESET
-       << "\n"
-       << endl;
+  cout << "\n" << GREEN << BOLD
+       << "🚀 Graph Computation Server (Leader-Follower)" << RESET << endl;
+  cout << CYAN << "📍 Port: " << BOLD << port << RESET << endl;
+  cout << CYAN << "🔌 Socket: " << socket << RESET << endl;
+  cout << MAGENTA << "👥 Thread Pool: 10 threads" << RESET << endl;
+  cout << YELLOW << "⏳ Waiting for connections..." << RESET << "\n" << endl;
 }
 
 void ServerLogger::printPipelineServerBanner(int port, int socket, int pipelineSize, mutex& lock) {
   unique_lock<mutex> guard(lock);
-  cout << "\n" << BOLD << BLUE
-       << "╔═══════════════════════════════════════════════════════╗" << RESET
-       << endl;
-  cout << BOLD << BLUE << "║" << RESET << "  " << GREEN << BOLD
-       << "🚀 Graph Computation Server (Pipeline/Active Object)" << RESET << "  "
-       << BOLD << BLUE << "║" << RESET << endl;
-  cout << BOLD << BLUE
-       << "╠═══════════════════════════════════════════════════════╣" << RESET
-       << endl;
-  cout << BOLD << BLUE << "║" << RESET << "  " << CYAN << "📍 Port: " << BOLD
-       << port << RESET << "                                    " 
-       << BOLD << BLUE << "║" << RESET << endl;
-  cout << BOLD << BLUE << "║" << RESET << "  " << CYAN
-       << "🔌 Socket: " << socket << RESET
-       << "                                  " << BOLD << BLUE 
-       << "║" << RESET << endl;
-  cout << BOLD << BLUE << "║" << RESET << "  " << MAGENTA
-       << "⚙️  Pipeline: " << pipelineSize << " ActiveObject stages" << RESET 
-       << "              " << BOLD << BLUE << "║" << RESET << endl;
-  cout << BOLD << BLUE << "║" << RESET << "  " << YELLOW
-       << "⏳ Waiting for connections..." << RESET << "                    "
-       << BOLD << BLUE << "║" << RESET << endl;
-  cout << BOLD << BLUE
-       << "╚═══════════════════════════════════════════════════════╝" << RESET
-       << "\n" << endl;
+  cout << "\n" << GREEN << BOLD
+       << "🚀 Graph Computation Server (Pipeline/Active Object)" << RESET << endl;
+  cout << CYAN << "📍 Port: " << BOLD << port << RESET << endl;
+  cout << CYAN << "🔌 Socket: " << socket << RESET << endl;
+  cout << MAGENTA << "⚙️  Pipeline: " << pipelineSize << " ActiveObject stages" << RESET << endl;
+  cout << YELLOW << "⏳ Waiting for connections..." << RESET << "\n" << endl;
 }
 
 void ServerLogger::sendWelcomeMessage(int clientSock, void (*sendFunc)(int, const string&)) {

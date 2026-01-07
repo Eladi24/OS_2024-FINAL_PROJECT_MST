@@ -33,6 +33,7 @@ private:
     mutex _mx; // Mutex to protect the task queue
     condition_variable _cv; // Condition variable to wake up the worker thread
     atomic<bool> _done; // Flag to signal the worker thread to stop
+    int _stageId; // Pipeline stage ID (for logging)
     thread _worker; // Worker thread
     static mutex _outputMx; // Mutex to protect the output stream
 
@@ -46,7 +47,7 @@ private:
     void run();
 
 public:
-    ActiveObject() :_tasks(), _done(false), _worker(&ActiveObject::run, this) {}
+    ActiveObject(int stageId = -1) :_tasks(), _done(false), _stageId(stageId), _worker(&ActiveObject::run, this) {}
 
     ~ActiveObject();
     

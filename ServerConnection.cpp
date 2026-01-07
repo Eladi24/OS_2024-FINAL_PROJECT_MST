@@ -64,15 +64,7 @@ int acceptClient(int serverSock, std::atomic<int>& clientNumber,
   clientNumber.store(clientNumber.load(std::memory_order_acquire) + 1,
                      std::memory_order_release);
 
-  // Log connection
-  char s[INET6_ADDRSTRLEN];
-  inet_ntop(client_addr.sin_family, &client_addr.sin_addr, s, sizeof(s));
-  {
-    std::unique_lock<std::mutex> guard(coutLock);
-    std::cout << "New connection from " << s << " on socket " << client_sock << std::endl;
-    std::cout << "Currently " << clientNumber.load(std::memory_order_acquire)
-              << " clients connected" << std::endl;
-  }
+  // Connection logged by caller (PipelineServer or LFServer)
 
   return client_sock;
 }

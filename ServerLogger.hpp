@@ -40,6 +40,8 @@ public:
   static void logCleanup(const string& message, mutex& lock);
   static void logThreads(const string& message, mutex& lock);
   static void logClientClosed(int socket, mutex& lock);
+  static void logWake(int stageId, mutex& lock);
+  static void logSleep(int stageId, mutex& lock);
 
   // Response formatting functions
   static string formatWelcomeMessage();

@@ -57,10 +57,12 @@ void signalHandler(int signum) {
       "\n🛑 [SERVER] Server is shutting down. Connection will be closed.\n";
   {
     unique_lock<mutex> guard(clientsMutex);
+    ServerLogger::logCleanup("Closing " + to_string(connectedClients.size()) + " client connection(s)", coutLock);
     for (int clientSock : connectedClients) {
       if (clientSock >= 0) {
         send(clientSock, shutdownMsg.c_str(), shutdownMsg.size(), 0);
         close(clientSock);
+        ServerLogger::logClientClosed(clientSock, coutLock);
       }
     }
     connectedClients.clear();
@@ -68,6 +70,7 @@ void signalHandler(int signum) {
   }
 
   // Wait for threads to finish current operations
+  ServerLogger::logCleanup("Waiting for threads to finish operations...", coutLock);
   this_thread::sleep_for(chrono::milliseconds(SHUTDOWN_CLEANUP_DELAY_MS));
 
   // Call cleanup lambda if it exists
@@ -135,18 +138,20 @@ bool validateAndReadNewgraph(int clientSock, stringstream& ss, char* buffer,
   
 
   edges.clear();
+  
   for (int i = 0; i < m; i++) {
     int u = 0, v = 0, w = 0;
     
+    // Try to read edge from current stringstream first
+    ss.clear();  // Clear any error flags
     if (!(ss >> u >> v >> w)) {
-
+      // Need more data - read next packet
       ss.clear();
       ss.str("");
       memset(buffer, 0, BUFFER_SIZE);
       int bytesReceived = recv(clientSock, buffer, BUFFER_SIZE, 0);
       
       if (bytesReceived <= 0) {
-
         {
           unique_lock<mutex> guard(clientsMutex);
           if (connectedClients.find(clientSock) == connectedClients.end()) {
@@ -158,20 +163,17 @@ bool validateAndReadNewgraph(int clientSock, stringstream& ss, char* buffer,
         return false;
       }
       
-
-      string receivedData(buffer, bytesReceived);
-      const string commandKeywords[] = {"[NOTIFICATION]", "Newgraph", "AddEdge",
-                                        "RemoveEdge", "Prim", "Kruskal"};
-      for (const string &keyword : commandKeywords) {
-        if (receivedData.find(keyword) != string::npos) {
-          errorMsg = "Invalid input format. Received command instead of edge data.\n";
-          return false;
-        }
-      }
-      
+      ss.clear();
+      ss.str("");
       ss.write(buffer, bytesReceived);
+      ss.seekg(0);
+      ss.clear();
+      
       if (!(ss >> u >> v >> w)) {
-        errorMsg = "Invalid input format. Please enter 3 integers for u, v, and w.\n";
+        // Invalid format - didn't read all three values
+        errorMsg = "Invalid input format. Expected " + to_string(m) + 
+                   " edges (format: u v w), but received invalid data at edge " + 
+                   to_string(i + 1) + ". Newgraph command aborted. Please start with a new command.\n";
         return false;
       }
     }
@@ -230,7 +232,7 @@ unique_ptr<unique_lock<mutex>> tryLockGraph(int clientSock,
   auto guard = make_unique<unique_lock<mutex>>(graphMutex, try_to_lock);
   if (!guard->owns_lock()) {
     string response =
-        "⚠️  Graph is being used by another client. Please retry...\n";
+        "Graph is being used by another client. Cannot execute " + cmdName + " command.\n";
     sendResponse(clientSock, response);
     ServerLogger::logLockRejected(clientSock, cmdName, coutLock);
     return nullptr;
@@ -243,19 +245,19 @@ unique_ptr<unique_lock<mutex>> tryLockGraph(int clientSock,
 CommandResult handleNewgraph(int clientSock, stringstream &ss,
                              unique_ptr<Graph> &g, unique_ptr<Tree> &mst,
                              char *buffer) {
-  // Step 1: Lock acquisition
-  auto guard = tryLockGraph(clientSock, "Newgraph");
-  if (!guard) {
-    return {true, false, ""}; // continue
-  }
-
-  // Step 2: Validate and collect all edges BEFORE creating graph
+  // Step 1: Validate and collect all edges BEFORE locking
   int n, m;
   vector<tuple<int, int, int>> edges;
   string errorMsg;
   
   if (!validateAndReadNewgraph(clientSock, ss, buffer, n, m, edges, errorMsg)) {
     return {true, false, errorMsg};
+  }
+
+  // Step 2: Lock acquisition (only after validation passes)
+  auto guard = tryLockGraph(clientSock, "Newgraph");
+  if (!guard) {
+    return {true, false, ""}; // continue
   }
 
   // Step 3: Reset existing graph and MST
@@ -270,7 +272,7 @@ CommandResult handleNewgraph(int clientSock, stringstream &ss,
     g->addEdge(u, v, w);  
   }
 
-  // Step 6: Log and respond
+  // Step 6: Log and respond (lock will be released when guard goes out of scope)
   ServerLogger::logGraphCreated(clientSock, n, m, coutLock);
 
   string response = "\nGraph created with " + to_string(n) + " vertices and " +
@@ -280,7 +282,7 @@ CommandResult handleNewgraph(int clientSock, stringstream &ss,
 /**
  * @brief Handles the AddEdge command.
  * 
- * Matches PipelineServer's pattern:
+ * 
  * 1. Format validation (parse input) - NO LOCK
  * 2. Lock acquisition
  * 3. Graph state check
@@ -289,7 +291,7 @@ CommandResult handleNewgraph(int clientSock, stringstream &ss,
  */
  CommandResult handleAddEdge(int clientSock, stringstream &ss,
   unique_ptr<Graph> &g) {
-// Step 1: Format validation (NO LOCK)
+
 int u, v, w;
 if (!(ss >> u >> v >> w)) {
 return {true, false, "Invalid format. Please provide 3 integers: u v w\n"};
@@ -378,12 +380,12 @@ CommandResult handleMST(int clientSock, const string &cmd,
                         unique_ptr<Tree> &mst) {
   auto guard = tryLockGraph(clientSock, cmd);
   if (!guard) {
-    return {true, false, ""}; /
+    return {true, false, ""};
   }
 
   if (!validateGraph(g)) {
     ServerLogger::logError("Graph not initialized for MST computation", coutLock);
-    return {true, false, ""}; // continue (no response sent)
+    return {false, false, "Graph not initialized.\n"};
   }
 
   // Reset existing MST
@@ -403,9 +405,10 @@ CommandResult handleMST(int clientSock, const string &cmd,
 
   string response = "MST created using " + cmd + " algorithm.\n\n";
   response += mst->printMST();
-  response += ServerLogger::formatMSTStats(mst->totalWeight(), mst->diameter(),
-                                           mst->averageDistanceEdges(),
-                                           mst->shortestPath());
+  response += "TOTAL WEIGHT OF THE MST IS: " + to_string(mst->totalWeight()) + "\n\n";
+  response += "THE LONGEST PATH (DIAMETER) OF THE MST IS: " + to_string(mst->diameter()) + "\n\n";
+  response += "AVERAGE DISTANCE OF THE MST IS: " + to_string(mst->averageDistanceEdges()) + "\n\n";
+  response += "SHORTEST PATH IS: " + mst->shortestPath() + "\n";
 
   return {false, false, response};
 }
@@ -444,7 +447,8 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory,
   while (!shutdownFlag.load(memory_order_acquire)) {
     bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
     if (bytesReceived <= 0) {
-      // Remove client from connected set      {
+      // Remove client from connected set
+      {
         unique_lock<mutex> guard(clientsMutex);
         connectedClients.erase(clientSock);
       }
@@ -503,11 +507,12 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory,
     if (result.shouldBreak) {
       break;
     }
-    if (result.shouldContinue) {
-      continue;
-    }
+    // Send response before continuing (if there's an error message)
     if (!result.response.empty()) {
       sendResponse(clientSock, result.response);
+    }
+    if (result.shouldContinue) {
+      continue;
     }
   }
 
@@ -589,19 +594,30 @@ int main() {
   signalHandlerLambda = [&](int signum) {
     // Stop thread pool FIRST (before closing server socket)
     if (pool) {
+      ServerLogger::logCleanup("Stopping thread pool", coutLock);
       pool->stopPool();
     }
 
     // Now close server socket (threads are stopped, so no select() calls)
     if (serverSock >= 0) {
+      ServerLogger::logCleanup("Closing server socket", coutLock);
       close(serverSock);
     }
 
     // Cleanup resources
+    ServerLogger::logCleanup("Destroying MST strategy", coutLock);
     factory.destroyStrategy();
+    
+    ServerLogger::logCleanup("Resetting Reactor", coutLock);
     reactor.reset();
+    
+    ServerLogger::logCleanup("Resetting Thread Pool", coutLock);
     pool.reset();
+    
+    ServerLogger::logCleanup("Resetting Graph", coutLock);
     g.reset();
+    
+    ServerLogger::logCleanup("Resetting MST", coutLock);
     t.reset();
   };
 

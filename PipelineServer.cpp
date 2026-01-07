@@ -5,10 +5,13 @@
 #include "ServerLogger.hpp"
 #include "Tree.hpp"
 #include <arpa/inet.h>
+#include <chrono>
 #include <csignal>
 #include <cstring>
 #include <future>
 #include <netinet/in.h>
+#include <set>
+#include <sstream>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -25,7 +28,9 @@ mutex graphLock;
 mutex futureLock; 
 mutex &coutLock =ActiveObject::getOutputMutex();
 
-atomic<bool>terminateFlag(false); 
+atomic<bool>terminateFlag(false);
+set<int> connectedClients;
+mutex clientsMutex; 
 
 /**
  * @struct functArgs
@@ -139,7 +144,10 @@ bool validateAndReadNewgraph(int clientSock, stringstream& ss, mutex& ssLock,
         
         ss.write(buffer, bytesReceived);
         if (!(ss >> u >> v >> w)) {
-          errorMsg = "Invalid input format. Please enter 3 integers for u, v, and w.\n";
+          // Invalid format - abort Newgraph command, client must start fresh
+          errorMsg = "Invalid input format. Expected " + to_string(m) + 
+                     " edges (format: u v w), but received invalid data at edge " + 
+                     to_string(i + 1) + ". Newgraph command aborted. Please start with a new command.\n";
           return false;
         }
       }
@@ -295,6 +303,11 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
     memset(buffer, 0, sizeof(buffer));
     int bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
     if (bytesReceived <= 0) {
+      // Remove client from connected set
+      {
+        unique_lock<mutex> guard(clientsMutex);
+        connectedClients.erase(clientSock);
+      }
       clientNumber.store(clientNumber.load(memory_order_acquire) - 1,
                          memory_order_release);
       if (bytesReceived == 0) {
@@ -333,21 +346,21 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
 
       pipeline[0]->enqueue([&g, &mst, edges, n, m, &future, &done, &cv, clientSock]() {
 
-        unique_lock<mutex> graphGuard(graphLock);
-        
-        resetGraphAndMST(g, mst);
+        {
+          unique_lock<mutex> graphGuard(graphLock);
+          
+          resetGraphAndMST(g, mst);
 
-        g = make_unique<Graph>(n, m);
+          g = make_unique<Graph>(n, m);
 
-        for (const auto& [u, v, w] : edges) {
-          g->addEdge(u, v, w);  // addEdge validates internally
+          for (const auto& [u, v, w] : edges) {
+            g->addEdge(u, v, w);  // addEdge validates internally
+          }
+
+          setResponseAndSignal("\nGraph created with " + to_string(n) + " vertices and " +
+                               to_string(m) + " edges.\n", future, done, cv);
         }
-
-        // ACTIVEOBJECT: Set response when all edges are added
-        setResponseAndSignal("\nGraph created with " + to_string(n) + " vertices and " +
-                             to_string(m) + " edges.\n", future, done, cv);
         
-        // Log graph creation (outside lock to avoid deadlock)
         ServerLogger::logGraphCreated(clientSock, n, m, coutLock);
       });
 
@@ -364,14 +377,17 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
 
       pipeline[0]->enqueue([&g, u, v, w, &future, &done, &cv, clientSock]() {
 
-        unique_lock<mutex> graphGuard(graphLock);
+        bool success;
+        {
+          unique_lock<mutex> graphGuard(graphLock);
 
-        if (!isGraphValid(g)) {
-          setResponseAndSignal("Graph not initialized.\n", future, done, cv);
-          return;
+          if (!isGraphValid(g)) {
+            setResponseAndSignal("Graph not initialized.\n", future, done, cv);
+            return;
+          }
+          
+          success = g->addEdge(u, v, w);
         }
-        
-        bool success = g->addEdge(u, v, w);
         
         if (!success) {
           setResponseAndSignal("Invalid edge. Vertices should be in the range [1, n] and "
@@ -381,6 +397,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
           setResponseAndSignal("Edge added between vertices " + to_string(u) + " and " +
                                to_string(v) + " with weight " + to_string(w) + ".\n",
                                future, done, cv);
+          // Log after lock is released
           ServerLogger::logEdgeAdded(clientSock, u, v, w, coutLock);
         }
       });
@@ -401,15 +418,17 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
 
       pipeline[0]->enqueue([&g, u, v, &future, &done, &cv, clientSock]() {
 
-        unique_lock<mutex> graphGuard(graphLock);
-        
+        bool success;
+        {
+          unique_lock<mutex> graphGuard(graphLock);
 
-        if (!isGraphValid(g)) {
-          setResponseAndSignal("Graph not initialized.\n", future, done, cv);
-          return;
+          if (!isGraphValid(g)) {
+            setResponseAndSignal("Graph not initialized.\n", future, done, cv);
+            return;
+          }
+          
+          success = g->removeEdge(u, v);
         }
-        
-        bool success = g->removeEdge(u, v);
         
         if (!success) {
           setResponseAndSignal("Edge between vertices " + to_string(u) + " and " +
@@ -417,7 +436,8 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
         } else {
           setResponseAndSignal("Edge removed between vertices " + to_string(u) + " and " +
                                to_string(v) + ".\n", future, done, cv);
-          // Log edge removal (outside lock to avoid deadlock)
+
+          // Log after lock is released
           ServerLogger::logEdgeRemoved(clientSock, u, v, coutLock);
         }
       });
@@ -457,17 +477,22 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
         }
         pipeline[2]->enqueue([&g, &factory, &mst, &future, &done, &cv,
                               &pipeline, cmd, clientSock]() {
-          unique_lock<mutex> graphGuard(graphLock);
-          mst = factory.createMST(g);
-          appendToResponse("MST created using " + cmd + " algorithm.\n", future);
-          appendToResponse(mst->printMST(), future);
+          {
+            unique_lock<mutex> graphGuard(graphLock);
+            mst = factory.createMST(g);
+            appendToResponse("MST created using " + cmd + " algorithm.\n", future);
+            appendToResponse(mst->printMST(), future);
+          }
+          // Log after lock is released, at end of task (appears just before SLEEP)
+          ServerLogger::logMSTComputed(clientSock, cmd, coutLock);
 
           pipeline[3]->enqueue([&mst, &future, &done, &cv, &pipeline]() {
             {
               unique_lock<mutex> graphGuard(graphLock);
               appendToResponse("TOTAL WEIGHT OF THE MST IS: ", future);
               appendToResponse(to_string(mst->totalWeight()) + "\n\n", future);
-              pipeline[4]->enqueue([&mst, &future, &done, &cv, &pipeline]() {
+            }
+            pipeline[4]->enqueue([&mst, &future, &done, &cv, &pipeline]() {
                 {
                   unique_lock<mutex> graphGuard(graphLock);
                   appendToResponse("THE LONGEST PATH (DIAMETER) OF THE MST IS: ", future);
@@ -484,31 +509,34 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
                           appendToResponse("SHORTEST PATH IS: ", future);
                           appendToResponse(mst->shortestPath() + "\n", future);
                         }
-                        // ACTIVEOBJECT: Signal completion (response already built incrementally)
+
                         signalCompletion(future, done, cv);
                       });
                     }
                   });
                 }
               });
-            }
           });
         });
       });
     } else if (cmd == "Exit") {
-      // Immediate response (no async operation)
       ServerConnection::sendResponse(clientSock, "Goodbye\n", coutLock);
       ServerLogger::logDisconnect(clientSock, coutLock);
+      
+      // Remove client from connected set
+      {
+        unique_lock<mutex> guard(clientsMutex);
+        connectedClients.erase(clientSock);
+      }
+      
       clientNumber.store(clientNumber.load(memory_order_acquire) - 1,
                          memory_order_release);
-      
 
       shutdown(clientSock, SHUT_WR);
+      break;  // Exit the loop for this client
 
-      close(clientSock);
-      return;  // Exit function immediately (socket already closed)
     } else {
-      // Immediate response (no async operation)
+
       ServerConnection::sendResponse(
           clientSock, "Invalid command: " + cmd + "\n", coutLock);
       continue;
@@ -517,6 +545,12 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
     waitAndSendResponse(clientSock, future, done, cv);
   }
 
+  // Remove client from connected set before closing
+  {
+    unique_lock<mutex> guard(clientsMutex);
+    connectedClients.erase(clientSock);
+  }
+  
   shutdown(clientSock, SHUT_RDWR);
   close(clientSock);
 }
@@ -542,20 +576,51 @@ int main() {
   unique_ptr<functArgs> faPtr;
 
   signalHandlerLambda = [&](int signum) {
+    // Notify and close all client connections
+    string shutdownMsg =
+        "\n🛑 [SERVER] Server is shutting down. Connection will be closed.\n";
+    {
+      unique_lock<mutex> guard(clientsMutex);
+      ServerLogger::logCleanup("Closing " + to_string(connectedClients.size()) + " client connection(s)", coutLock);
+      for (int clientSock : connectedClients) {
+        if (clientSock >= 0) {
+          send(clientSock, shutdownMsg.c_str(), shutdownMsg.size(), 0);
+          close(clientSock);
+          ServerLogger::logClientClosed(clientSock, coutLock);
+        }
+      }
+      connectedClients.clear();
+      clientNumber.store(0, memory_order_release);
+    }
 
+    // Wait for threads to finish current operations
+    ServerLogger::logCleanup("Waiting for threads to finish operations...", coutLock);
+    this_thread::sleep_for(chrono::milliseconds(300));
+
+    ServerLogger::logCleanup("Cancelling and joining " + to_string(clientThreads.size()) + " client thread(s)", coutLock);
     for (auto &thread : clientThreads) {
       pthread_cancel(thread);
       pthread_join(thread, nullptr);
     }
+    clientThreads.clear();
     
+    ServerLogger::logCleanup("Resetting functArgs", coutLock);
     faPtr.reset();
+    
+    ServerLogger::logCleanup("Destroying MST strategy", coutLock);
     factory.destroyStrategy();
+    
+    ServerLogger::logCleanup("Resetting MST", coutLock);
     mst.reset();
+    
+    ServerLogger::logCleanup("Resetting Graph", coutLock);
     g.reset();
     
+    ServerLogger::logCleanup("Resetting " + to_string(pipeline.size()) + " pipeline ActiveObjects", coutLock);
     for (auto &obj : pipeline) {
       obj.reset();
     }
+    pipeline.clear();
 
   };
 
@@ -569,15 +634,34 @@ int main() {
   // Print server startup banner
   ServerLogger::printPipelineServerBanner(port, serverSock, PIPELINE_SIZE, coutLock);
 
+  // Create pipeline ActiveObjects
   for (int i = 0; i < PIPELINE_SIZE; i++) {
-    pipeline.push_back(make_unique<ActiveObject>());
+    pipeline.push_back(make_unique<ActiveObject>(i));  // Pass stage ID
+    ServerLogger::logThreads("Pipeline ActiveObject #" + to_string(i+1) + " created (stage " + to_string(i) + ")", coutLock);
   }
+  
+  ServerLogger::logThreads("Pipeline initialized with " + to_string(PIPELINE_SIZE) + " stages", coutLock);
 
   while (true) {
     int newClientSock =
         ServerConnection::acceptClient(serverSock, clientNumber, coutLock);
     if (newClientSock == -1) {
       continue;
+    }
+
+    // Get client IP for logging
+    struct sockaddr_in client_addr;
+    socklen_t sin_size = sizeof(client_addr);
+    getpeername(newClientSock, (struct sockaddr *)&client_addr, &sin_size);
+    char s[INET6_ADDRSTRLEN];
+    inet_ntop(client_addr.sin_family, &client_addr.sin_addr, s, sizeof(s));
+    ServerLogger::logConnect(clientNumber.load(), string(s), newClientSock, coutLock);
+    ServerLogger::logStatus(clientNumber.load(), coutLock);
+    
+    // Add client to connected set
+    {
+      unique_lock<mutex> guard(clientsMutex);
+      connectedClients.insert(newClientSock);
     }
 
     faPtr = unique_ptr<functArgs>(new functArgs{
@@ -590,6 +674,11 @@ int main() {
     };
     pthread_create(&tid, nullptr, threadFunc, faPtr.get());
     clientThreads.push_back(tid);
+    
+    // Log thread creation
+    stringstream ss;
+    ss << hex << tid;
+    ServerLogger::logThreads("Client handler thread created for socket " + to_string(newClientSock) + " (ID: 0x" + ss.str() + ")", coutLock);
   }
   close(serverSock);
 
