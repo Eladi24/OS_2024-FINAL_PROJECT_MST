@@ -61,10 +61,11 @@ class DSU {
         DSU(int n): parent(n, -1), rank(n, 0) {}
         
         /*
-        * @brief This method will find the representative of the set that contains the element u.
-        * @param u The element whose representative will be found.
-        * @return The representative of the set that contains the element u.
-        */
+         * @brief This method will find the representative of the set that contains the element u.
+         * Uses path compression to optimize future find operations.
+         * @param u The element whose representative will be found.
+         * @return The representative of the set that contains the element u.
+         */
         int find(int u);
 
         /*

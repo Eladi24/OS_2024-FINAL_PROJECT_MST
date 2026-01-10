@@ -14,7 +14,6 @@ const string THREAD_BOLD = "\033[1m";
 // Helper function to format thread ID (show last 4 hex digits)
 string formatThreadId(pthread_t id) {
     stringstream ss;
-    // Convert pthread_t to uintptr_t for formatting (works on both Linux and macOS)
     uintptr_t idValue = reinterpret_cast<uintptr_t>(id);
     ss << hex << setfill('0') << setw(4) << (idValue & 0xFFFF);
     return ss.str();
@@ -24,12 +23,9 @@ mutex LFThreadPool::_outputMx;
 LFThreadPool::LFThreadPool(size_t numThreads, Reactor& reactor)
     : _followers(numThreads), _stop(false), _leaderChanged(false), _reactor(reactor)
 {
-    // Start the follower threads
     for (size_t i = 0; i < numThreads; ++i)
     {
-        // Create a new thread context object
         _followers[i] = make_shared<ThreadContext>();
-        // Create a new thread and bind the follower loop function
         _followers[i]->createThread(bind(&LFThreadPool::followerLoop, this, i));
         {
             unique_lock<mutex> guard(_outputMx);
@@ -39,7 +35,7 @@ LFThreadPool::LFThreadPool(size_t numThreads, Reactor& reactor)
                  << THREAD_RESET << endl;
         }
     }
-    // Promote the initial leader
+   
     promoteNewLeader();
 }
 
@@ -51,7 +47,6 @@ LFThreadPool::~LFThreadPool()
              << "Thread pool destructor called" << THREAD_RESET << endl;
     }
     
-    // Only stop if not already stopped
     if (!_stop.load(memory_order_acquire)) {
         stopPool();
     }
@@ -63,7 +58,7 @@ LFThreadPool::~LFThreadPool()
 
 void LFThreadPool::promoteNewLeader()
 {
-    // If there is no leader, promote the first follower in the list
+
     if (_leader == nullptr)
     {
         {
@@ -74,14 +69,12 @@ void LFThreadPool::promoteNewLeader()
                  << THREAD_RESET << endl;
         }
         _leader = *_followers.begin();
-        // Wake up the new leader to handle events
         _leader->wakeUp();
         return;
     }
     
     for (auto &follower : _followers)
     {
-        // If the follower is not the current leader and is not awake, promote it
         if (*follower != *_leader && !follower->isAwake())
         {
             {
@@ -92,7 +85,6 @@ void LFThreadPool::promoteNewLeader()
                      << THREAD_RESET << endl;
             }
             _leader = follower;
-            // Wake up the new leader to handle events
             _leader->wakeUp();
             return;
         }
@@ -104,7 +96,6 @@ void LFThreadPool::followerLoop(int id)
 {
     while (true)
     {
-        // Wait until the follower is promoted to be the leader or the thread pool is stopped
         _followers[id]->conditionWait(_stop);
         {
             unique_lock<mutex> guard(_outputMx);
@@ -113,25 +104,21 @@ void LFThreadPool::followerLoop(int id)
                  << THREAD_RESET << " woke up" << endl;
         }
         
-        // If stop then the program is shutting down
         if (_stop.load(memory_order_acquire))
             break;
 
-        // Handle events in the reactor
+
         _reactor.handleEvents();
         
-        // Check again after handleEvents (might have been set during select)
         if (_stop.load(memory_order_acquire))
             break;
         
-        // Promote a new leader and execute the event
         shared_ptr<ThreadContext> currThread = _leader;
         if (!currThread) {
-            break;  // No leader available, exit
+            break; 
         }
         promoteNewLeader();
 
-        // Execute events in the thread context (only if not shutting down)
         if (!_stop.load(memory_order_acquire)) {
             currThread->executeEvent();
         }
@@ -141,7 +128,7 @@ void LFThreadPool::followerLoop(int id)
                  << "Thread " << THREAD_CYAN << "0x" << formatThreadId(currThread->getId()) 
                  << THREAD_RESET << " returning to sleep" << endl;
         }
-        // Put the thread to sleep
+
         currThread->sleep();
     }
 }
@@ -149,13 +136,13 @@ void LFThreadPool::followerLoop(int id)
 
 void LFThreadPool::addFd(int fd, function<void()> event)
 {
-    // Add the file descriptor to the leader
+
     _leader->addHandle(fd, event);
 }
 
 void LFThreadPool::stopPool()
 {
-    // Stop all worker threads
+
     _stop.store(true, memory_order_release);
     for (auto & follower : _followers)
     {
@@ -169,7 +156,7 @@ void LFThreadPool::join()
     for (auto & follower : _followers)
     {
         if (!follower) {
-            continue;  // Skip if already reset
+            continue;  
         }
         
         pthread_t id = follower->getId();
@@ -179,12 +166,11 @@ void LFThreadPool::join()
                  << "Joining thread " << THREAD_CYAN << "0x" << formatThreadId(id) 
                  << THREAD_RESET << endl;
         }
-        // Cancel the thread and join it
         try {
             follower->cancel();
             follower->join();
         } catch (...) {
-            // Ignore exceptions during shutdown
+            
         }
         follower.reset();
     }

@@ -10,6 +10,7 @@
 #include <cstring>
 #include <future>
 #include <netinet/in.h>
+#include <map>
 #include <set>
 #include <sstream>
 #include <sys/socket.h>
@@ -18,7 +19,8 @@
 // Constants
 const int port = 4050; 
 const int PIPELINE_SIZE = 7;
-const int BUFFER_SIZE = 1024; 
+const int BUFFER_SIZE = 1024;
+const int MAX_CLIENTS = 10; 
 
 // Global variables
 function<void(int)>
@@ -30,7 +32,9 @@ mutex &coutLock =ActiveObject::getOutputMutex();
 
 atomic<bool>terminateFlag(false);
 set<int> connectedClients;
-mutex clientsMutex; 
+mutex clientsMutex;
+map<int, pthread_t> clientThreadsMap;  // Map socket -> thread ID
+mutex threadsMapMutex; 
 
 /**
  * @struct functArgs
@@ -254,23 +258,48 @@ inline void resetGraphAndMST(unique_ptr<Graph>& g, unique_ptr<Tree>& mst) {
  * 
  * This encapsulates the common pattern:
  * 1. Wait for done flag (set by ActiveObject when operation completes)
- * 2. Send response to client
- * 3. Reset state for next operation
+ * 2. Check if client is still connected before sending response
+ * 3. Send response to client if still connected
+ * 4. Reset state for next operation
  *
  * @param clientSock Client socket
  * @param future Reference to response string (set by ActiveObject)
  * @param done Reference to completion flag (set by ActiveObject)
  * @param cv Condition variable for waiting
+ * @return true if response was sent, false if client disconnected
  */
-void waitAndSendResponse(int clientSock, string& future, atomic<bool>& done,
+/**
+ * @brief Waits for pipeline operation to complete, then sends response ONCE
+ * 
+
+ */
+bool waitAndSendResponse(int clientSock, string& future, atomic<bool>& done,
                          condition_variable& cv) {
+  // Acquire lock to wait for pipeline completion
   unique_lock<mutex> guard(futureLock);
+  
   while (!done.load(memory_order_acquire)) {
     cv.wait(guard);
   }
+  
+  {
+    unique_lock<mutex> clientGuard(clientsMutex);
+    if (connectedClients.find(clientSock) == connectedClients.end()) {
+      ServerLogger::logInfo("Client " + to_string(clientSock) + 
+                            " disconnected during operation. Response discarded.", coutLock);
+      done.store(false, memory_order_release);
+      future.clear();
+      return false;
+    }
+  }
+  
+  // Send the response ONCE to client (client still connected)
   ServerConnection::sendResponse(clientSock, future, coutLock);
+  
+  // Reset state for next operation
   done.store(false, memory_order_release);
   future.clear();
+  return true;
 }
 
 /**
@@ -303,18 +332,29 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
     memset(buffer, 0, sizeof(buffer));
     int bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
     if (bytesReceived <= 0) {
-      // Remove client from connected set
+      int remainingSlots;
       {
         unique_lock<mutex> guard(clientsMutex);
         connectedClients.erase(clientSock);
+        remainingSlots = MAX_CLIENTS - connectedClients.size();
       }
+      
       clientNumber.store(clientNumber.load(memory_order_acquire) - 1,
                          memory_order_release);
+      
+      {
+        unique_lock<mutex> guard(threadsMapMutex);
+        clientThreadsMap.erase(clientSock);
+      }
+      
       if (bytesReceived == 0) {
         ServerLogger::logDisconnect(clientSock, coutLock);
+        ServerLogger::logStatus(clientNumber.load(), coutLock);
+        ServerLogger::logInfo("Slot available. " + to_string(remainingSlots) + " connection slot(s) remaining.", coutLock);
         break;
       } else {
         ServerLogger::logError("recv() failed for client " + to_string(clientSock), coutLock);
+        ServerLogger::logInfo("Slot available. " + to_string(remainingSlots) + " connection slot(s) remaining.", coutLock);
       }
     }
     buffer[bytesReceived] = '\0';
@@ -354,7 +394,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
           g = make_unique<Graph>(n, m);
 
           for (const auto& [u, v, w] : edges) {
-            g->addEdge(u, v, w);  // addEdge validates internally
+            g->addEdge(u, v, w);  
           }
 
           setResponseAndSignal("\nGraph created with " + to_string(n) + " vertices and " +
@@ -483,7 +523,6 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
             appendToResponse("MST created using " + cmd + " algorithm.\n", future);
             appendToResponse(mst->printMST(), future);
           }
-          // Log after lock is released, at end of task (appears just before SLEEP)
           ServerLogger::logMSTComputed(clientSock, cmd, coutLock);
 
           pipeline[3]->enqueue([&mst, &future, &done, &cv, &pipeline]() {
@@ -523,17 +562,25 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
       ServerConnection::sendResponse(clientSock, "Goodbye\n", coutLock);
       ServerLogger::logDisconnect(clientSock, coutLock);
       
-      // Remove client from connected set
+      int remainingSlots;
       {
         unique_lock<mutex> guard(clientsMutex);
         connectedClients.erase(clientSock);
+        remainingSlots = MAX_CLIENTS - connectedClients.size();
+      }
+      
+      {
+        unique_lock<mutex> guard(threadsMapMutex);
+        clientThreadsMap.erase(clientSock);
       }
       
       clientNumber.store(clientNumber.load(memory_order_acquire) - 1,
                          memory_order_release);
+      ServerLogger::logStatus(clientNumber.load(), coutLock);
+      ServerLogger::logInfo("Slot available. " + to_string(remainingSlots) + " connection slot(s) remaining.", coutLock);
 
       shutdown(clientSock, SHUT_WR);
-      break;  // Exit the loop for this client
+      break; 
 
     } else {
 
@@ -542,17 +589,32 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
       continue;
     }
 
-    waitAndSendResponse(clientSock, future, done, cv);
+
+    if (!waitAndSendResponse(clientSock, future, done, cv)) {
+
+      break;
+    }
   }
 
-  // Remove client from connected set before closing
+  // Remove client from connected set and thread tracking before closing
+  int remainingSlots;
   {
     unique_lock<mutex> guard(clientsMutex);
     connectedClients.erase(clientSock);
+    remainingSlots = MAX_CLIENTS - connectedClients.size();
   }
   
+  // Remove thread from tracking (thread will exit naturally)
+  {
+    unique_lock<mutex> guard(threadsMapMutex);
+    clientThreadsMap.erase(clientSock);
+  }
+  
+  ServerLogger::logInfo("Slot available. " + to_string(remainingSlots) + " connection slot(s) remaining.", coutLock);
   shutdown(clientSock, SHUT_RDWR);
   close(clientSock);
+  
+  // Thread will exit naturally here - it's responsible for its own cleanup
 }
 
 
@@ -572,11 +634,10 @@ int main() {
   unique_ptr<Graph> g;
   MSTFactory factory;
   unique_ptr<Tree> mst;
-  vector<pthread_t> clientThreads;
   unique_ptr<functArgs> faPtr;
 
   signalHandlerLambda = [&](int signum) {
-    // Notify and close all client connections
+    
     string shutdownMsg =
         "\n🛑 [SERVER] Server is shutting down. Connection will be closed.\n";
     {
@@ -594,15 +655,15 @@ int main() {
     }
 
     // Wait for threads to finish current operations
-    ServerLogger::logCleanup("Waiting for threads to finish operations...", coutLock);
-    this_thread::sleep_for(chrono::milliseconds(300));
-
-    ServerLogger::logCleanup("Cancelling and joining " + to_string(clientThreads.size()) + " client thread(s)", coutLock);
-    for (auto &thread : clientThreads) {
-      pthread_cancel(thread);
-      pthread_join(thread, nullptr);
+    // Threads are detached, so they'll clean themselves up automatically
+    ServerLogger::logCleanup("Waiting for " + to_string(clientThreadsMap.size()) + " client thread(s) to finish...", coutLock);
+    this_thread::sleep_for(chrono::milliseconds(500));
+    
+    {
+      unique_lock<mutex> guard(threadsMapMutex);
+      clientThreadsMap.clear();
     }
-    clientThreads.clear();
+    ServerLogger::logCleanup("All threads have been notified to exit", coutLock);
     
     ServerLogger::logCleanup("Resetting functArgs", coutLock);
     faPtr.reset();
@@ -624,45 +685,55 @@ int main() {
 
   };
 
-  // Create server socket using connection utilities
   int serverSock = ServerConnection::createServerSocket(port);
   if (serverSock < 0) {
     ServerLogger::logError("Failed to create server socket", coutLock);
     exit(1);
   }
 
-  // Print server startup banner
   ServerLogger::printPipelineServerBanner(port, serverSock, PIPELINE_SIZE, coutLock);
 
-  // Create pipeline ActiveObjects
   for (int i = 0; i < PIPELINE_SIZE; i++) {
-    pipeline.push_back(make_unique<ActiveObject>(i));  // Pass stage ID
+    pipeline.push_back(make_unique<ActiveObject>(i));  
     ServerLogger::logThreads("Pipeline ActiveObject #" + to_string(i+1) + " created (stage " + to_string(i) + ")", coutLock);
   }
   
-  ServerLogger::logThreads("Pipeline initialized with " + to_string(PIPELINE_SIZE) + " stages", coutLock);
 
   while (true) {
-    int newClientSock =
-        ServerConnection::acceptClient(serverSock, clientNumber, coutLock);
+    // Accept client connection
+    struct sockaddr_in client_addr;
+    socklen_t sin_size = sizeof(client_addr);
+    int newClientSock = accept(serverSock, (struct sockaddr *)&client_addr, &sin_size);
     if (newClientSock == -1) {
+      perror("accept");
       continue;
     }
 
-    // Get client IP for logging
-    struct sockaddr_in client_addr;
-    socklen_t sin_size = sizeof(client_addr);
-    getpeername(newClientSock, (struct sockaddr *)&client_addr, &sin_size);
     char s[INET6_ADDRSTRLEN];
     inet_ntop(client_addr.sin_family, &client_addr.sin_addr, s, sizeof(s));
-    ServerLogger::logConnect(clientNumber.load(), string(s), newClientSock, coutLock);
-    ServerLogger::logStatus(clientNumber.load(), coutLock);
-    
-    // Add client to connected set
+
     {
       unique_lock<mutex> guard(clientsMutex);
+      if (connectedClients.size() >= MAX_CLIENTS) {
+        string rejectMsg = "Connection rejected: Server has reached maximum capacity (" + 
+                          to_string(MAX_CLIENTS) + " clients). Please try again later.\n";
+        ServerConnection::sendResponse(newClientSock, rejectMsg, coutLock);
+        
+        ServerLogger::logError("Connection from " + string(s) + " rejected: Maximum client limit (" + 
+                               to_string(MAX_CLIENTS) + ") reached", coutLock);
+        
+        shutdown(newClientSock, SHUT_RDWR);
+        close(newClientSock);
+        continue;
+      }
+      
+      clientNumber.store(clientNumber.load(memory_order_acquire) + 1,
+                         memory_order_release);
       connectedClients.insert(newClientSock);
     }
+
+    ServerLogger::logConnect(clientNumber.load(), string(s), newClientSock, coutLock);
+    ServerLogger::logStatus(clientNumber.load(), coutLock);
 
     faPtr = unique_ptr<functArgs>(new functArgs{
         newClientSock, ref(pipeline), ref(g), ref(factory), ref(mst)});
@@ -673,9 +744,15 @@ int main() {
       return nullptr;
     };
     pthread_create(&tid, nullptr, threadFunc, faPtr.get());
-    clientThreads.push_back(tid);
     
-    // Log thread creation
+    // Make thread detachable so it cleans itself up automatically when it exits
+    pthread_detach(tid);
+    
+    {
+      unique_lock<mutex> guard(threadsMapMutex);
+      clientThreadsMap[newClientSock] = tid;
+    }
+    
     stringstream ss;
     ss << hex << tid;
     ServerLogger::logThreads("Client handler thread created for socket " + to_string(newClientSock) + " (ID: 0x" + ss.str() + ")", coutLock);

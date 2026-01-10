@@ -67,7 +67,9 @@ int DSU::find(int i)
     {
         return i;
     }
-    return find(parent[i]);
+    // Path compression: make parent point directly to root
+    parent[i] = find(parent[i]);
+    return parent[i];
 }
 
 void DSU::unite(int x, int y)

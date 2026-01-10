@@ -37,6 +37,7 @@ public:
   static void logLockRejected(int socket, const string& command, mutex& lock);
   static void logShutdown(const string& message, mutex& lock);
   static void logError(const string& message, mutex& lock);
+  static void logInfo(const string& message, mutex& lock);
   static void logCleanup(const string& message, mutex& lock);
   static void logThreads(const string& message, mutex& lock);
   static void logClientClosed(int socket, mutex& lock);

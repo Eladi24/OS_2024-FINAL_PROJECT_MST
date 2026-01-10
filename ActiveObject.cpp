@@ -7,14 +7,11 @@
 mutex ActiveObject::_outputMx;
 ActiveObject::~ActiveObject()
 {
-    // Let the worker thread know that it should stop
     _done.store(true, memory_order_release);
-    // Wake up the worker thread
     {
         lock_guard<mutex> lock(_mx);
         _cv.notify_all();
     }
-    // Wait for the worker thread to finish its previous task
     _worker.join();
 }
 
@@ -28,7 +25,6 @@ void ActiveObject::run()
             _cv.wait(lock, [this] { return _done.load(memory_order_acquire) || !_tasks.empty(); });
             if (_done.load(memory_order_acquire) && _tasks.empty()) return;
             
-            // Log wake up (if stage ID is set, i.e., >= 0)
             if (_stageId >= 0) {
                 stringstream ss;
                 ss << hex << this_thread::get_id();
@@ -46,7 +42,6 @@ void ActiveObject::run()
         }
         task();
         
-        // Log returning to sleep (if stage ID is set)
         if (_stageId >= 0) {
             stringstream ss;
             ss << hex << this_thread::get_id();

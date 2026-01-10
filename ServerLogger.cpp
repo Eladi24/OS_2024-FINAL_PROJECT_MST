@@ -72,6 +72,11 @@ void ServerLogger::logError(const string& message, mutex& lock) {
   cerr << RED << "❌ [ERROR] " << RESET << message << RESET << endl;
 }
 
+void ServerLogger::logInfo(const string& message, mutex& lock) {
+  unique_lock<mutex> guard(lock);
+  cout << GREEN << "ℹ️  [INFO] " << RESET << message << RESET << endl;
+}
+
 void ServerLogger::logCleanup(const string& message, mutex& lock) {
   unique_lock<mutex> guard(lock);
   cout << YELLOW << "🧹 [CLEANUP] " << RESET << message << RESET << endl;

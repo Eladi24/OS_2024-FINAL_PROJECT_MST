@@ -52,7 +52,6 @@ void signalHandler(int signum) {
 
   shutdownFlag.store(true, memory_order_release);
 
-  // Notify and close all client connections
   string shutdownMsg =
       "\n🛑 [SERVER] Server is shutting down. Connection will be closed.\n";
   {
@@ -69,11 +68,9 @@ void signalHandler(int signum) {
     clientNumber.store(0, memory_order_release);
   }
 
-  // Wait for threads to finish current operations
   ServerLogger::logCleanup("Waiting for threads to finish operations...", coutLock);
   this_thread::sleep_for(chrono::milliseconds(SHUTDOWN_CLEANUP_DELAY_MS));
 
-  // Call cleanup lambda if it exists
   if (signalHandlerLambda) {
     try {
       signalHandlerLambda(signum);
@@ -142,10 +139,9 @@ bool validateAndReadNewgraph(int clientSock, stringstream& ss, char* buffer,
   for (int i = 0; i < m; i++) {
     int u = 0, v = 0, w = 0;
     
-    // Try to read edge from current stringstream first
-    ss.clear();  // Clear any error flags
+
+    ss.clear(); 
     if (!(ss >> u >> v >> w)) {
-      // Need more data - read next packet
       ss.clear();
       ss.str("");
       memset(buffer, 0, BUFFER_SIZE);
@@ -170,7 +166,6 @@ bool validateAndReadNewgraph(int clientSock, stringstream& ss, char* buffer,
       ss.clear();
       
       if (!(ss >> u >> v >> w)) {
-        // Invalid format - didn't read all three values
         errorMsg = "Invalid input format. Expected " + to_string(m) + 
                    " edges (format: u v w), but received invalid data at edge " + 
                    to_string(i + 1) + ". Newgraph command aborted. Please start with a new command.\n";
@@ -178,7 +173,6 @@ bool validateAndReadNewgraph(int clientSock, stringstream& ss, char* buffer,
       }
     }
     
-    // Validate edge values
     if (u < 0 || u > n || v < 0 || v > n || w < 0 || u == v) {
       errorMsg = "Invalid edge values. Vertices should be in the range [1, n] "
                  "and weight should be non-negative.\n";
@@ -201,7 +195,6 @@ bool validateAndReadNewgraph(int clientSock, stringstream& ss, char* buffer,
 }
 
 
-// Forward declarations for command handlers
 struct CommandResult {
   bool shouldContinue;
   bool shouldBreak;
@@ -219,6 +212,7 @@ CommandResult handleAddEdge(int clientSock, stringstream &ss,
 CommandResult handleRemoveEdge(int clientSock, stringstream &ss,
                                 unique_ptr<Graph> &g);
 CommandResult handleExit(int clientSock);
+
 
 /**
  * @brief Attempts to acquire the graph lock with error handling.
@@ -245,7 +239,6 @@ unique_ptr<unique_lock<mutex>> tryLockGraph(int clientSock,
 CommandResult handleNewgraph(int clientSock, stringstream &ss,
                              unique_ptr<Graph> &g, unique_ptr<Tree> &mst,
                              char *buffer) {
-  // Step 1: Validate and collect all edges BEFORE locking
   int n, m;
   vector<tuple<int, int, int>> edges;
   string errorMsg;
@@ -254,31 +247,27 @@ CommandResult handleNewgraph(int clientSock, stringstream &ss,
     return {true, false, errorMsg};
   }
 
-  // Step 2: Lock acquisition (only after validation passes)
   auto guard = tryLockGraph(clientSock, "Newgraph");
   if (!guard) {
     return {true, false, ""}; // continue
   }
 
-  // Step 3: Reset existing graph and MST
   g.reset();
   mst.reset();
-
-  // Step 4: Create new graph (all validation passed)
+ 
   g = make_unique<Graph>(n, m);
   
-  // Step 5: Add all pre-validated edges
   for (const auto& [u, v, w] : edges) {
     g->addEdge(u, v, w);  
   }
 
-  // Step 6: Log and respond (lock will be released when guard goes out of scope)
   ServerLogger::logGraphCreated(clientSock, n, m, coutLock);
 
   string response = "\nGraph created with " + to_string(n) + " vertices and " +
                    to_string(m) + " edges.\n";
   return {false, false, response};
 }
+
 /**
  * @brief Handles the AddEdge command.
  * 
@@ -300,7 +289,7 @@ return {true, false, "Invalid format. Please provide 3 integers: u v w\n"};
 // Step 2: Lock acquisition
 auto guard = tryLockGraph(clientSock, "AddEdge");
 if (!guard) {
-return {true, false, ""}; // continue
+return {true, false, ""}; 
 }
 
 // Step 3: Graph state check
@@ -388,10 +377,9 @@ CommandResult handleMST(int clientSock, const string &cmd,
     return {false, false, "Graph not initialized.\n"};
   }
 
-  // Reset existing MST
+
   mst.reset();
 
-  // Set strategy based on command
   if (cmd == "Prim") {
     factory.setStrategy(new PrimStrategy());
   } else if (cmd == "Kruskal") {
@@ -467,7 +455,7 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory,
       }
     }
 
-    // Check shutdown flag after recv (might have been set while blocking)
+    // Check shutdown flag after recv
     if (shutdownFlag.load(memory_order_acquire)) {
       ServerLogger::logShutdown(
           ServerLogger::YELLOW + "⚠️  [SHUTDOWN] Client " +
@@ -487,7 +475,6 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory,
     string cmd;
     ss >> cmd;
 
-    // Dispatch command to appropriate handler
     CommandResult result;
     if (cmd == "Newgraph") {
       result = handleNewgraph(clientSock, ss, g, mst, buffer);
@@ -507,8 +494,17 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory,
     if (result.shouldBreak) {
       break;
     }
-    // Send response before continuing (if there's an error message)
     if (!result.response.empty()) {
+      // Check if client is still connected before sending response
+      {
+        unique_lock<mutex> guard(clientsMutex);
+        if (connectedClients.find(clientSock) == connectedClients.end()) {
+          // Client disconnected during operation - skip sending response
+          ServerLogger::logInfo("Client " + to_string(clientSock) + 
+                               " disconnected during operation. Response discarded.", coutLock);
+          continue;
+        }
+      }
       sendResponse(clientSock, result.response);
     }
     if (result.shouldContinue) {
@@ -516,7 +512,6 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory,
     }
   }
 
-  // Cleanup: remove from connected set and close socket
   {
     unique_lock<mutex> guard(clientsMutex);
     connectedClients.erase(clientSock);
@@ -592,13 +587,11 @@ int main() {
   int serverSock;
 
   signalHandlerLambda = [&](int signum) {
-    // Stop thread pool FIRST (before closing server socket)
     if (pool) {
       ServerLogger::logCleanup("Stopping thread pool", coutLock);
       pool->stopPool();
     }
 
-    // Now close server socket (threads are stopped, so no select() calls)
     if (serverSock >= 0) {
       ServerLogger::logCleanup("Closing server socket", coutLock);
       close(serverSock);

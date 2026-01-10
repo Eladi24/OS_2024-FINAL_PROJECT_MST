@@ -32,7 +32,7 @@ using namespace std;
 class LFThreadPool
 {
 private:
-    vector<shared_ptr<ThreadContext>> _followers; ///< A list of follower threads (ThreadContext objects)
+    vector<shared_ptr<ThreadContext>> _followers; 
     mutex _mx; ///< Mutex to synchronize access to shared resources
     static mutex _outputMx; ///< Mutex to protect shared output resources (e.g., logging or console output)
     condition_variable _condition; ///< Condition variable to notify followers to wake up when needed
