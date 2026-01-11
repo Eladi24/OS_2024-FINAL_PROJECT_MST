@@ -58,18 +58,21 @@ LFThreadPool::~LFThreadPool()
 
 void LFThreadPool::promoteNewLeader()
 {
-
+    unique_lock<mutex> guard(_mx);
+    
     if (_leader == nullptr)
     {
         {
-            unique_lock<mutex> guard(_outputMx);
+            unique_lock<mutex> outputGuard(_outputMx);
             cout << THREAD_MAGENTA << "👑 [LEADER] " << THREAD_RESET 
                  << "Promoting initial leader " << THREAD_CYAN 
                  << "(ID: 0x" << formatThreadId(_followers.begin()->get()->getId()) << ")" 
                  << THREAD_RESET << endl;
         }
         _leader = *_followers.begin();
-        _leader->wakeUp();
+        shared_ptr<ThreadContext> newLeader = _leader;
+        guard.unlock(); // Release lock before calling wakeUp to avoid holding lock during thread wakeup
+        newLeader->wakeUp();
         return;
     }
     
@@ -78,14 +81,16 @@ void LFThreadPool::promoteNewLeader()
         if (*follower != *_leader && !follower->isAwake())
         {
             {
-                unique_lock<mutex> guard(_outputMx);
+                unique_lock<mutex> outputGuard(_outputMx);
                 cout << THREAD_MAGENTA << "👑 [LEADER] " << THREAD_RESET 
                      << "New leader promoted " << THREAD_CYAN 
                      << "(ID: 0x" << formatThreadId(follower->getId()) << ")" 
                      << THREAD_RESET << endl;
             }
             _leader = follower;
-            _leader->wakeUp();
+            shared_ptr<ThreadContext> newLeader = _leader;
+            guard.unlock(); // Release lock before calling wakeUp to avoid holding lock during thread wakeup
+            newLeader->wakeUp();
             return;
         }
     }
@@ -113,7 +118,13 @@ void LFThreadPool::followerLoop(int id)
         if (_stop.load(memory_order_acquire))
             break;
         
-        shared_ptr<ThreadContext> currThread = _leader;
+        shared_ptr<ThreadContext> currThread;
+        {
+            unique_lock<mutex> guard(_mx);
+            currThread = _leader;
+            guard.unlock();
+        }
+        
         if (!currThread) {
             break; 
         }
@@ -136,8 +147,13 @@ void LFThreadPool::followerLoop(int id)
 
 void LFThreadPool::addFd(int fd, function<void()> event)
 {
-
-    _leader->addHandle(fd, event);
+    unique_lock<mutex> guard(_mx);
+    shared_ptr<ThreadContext> currentLeader = _leader;
+    guard.unlock(); 
+    
+    if (currentLeader) {
+        currentLeader->addHandle(fd, event);
+    }
 }
 
 void LFThreadPool::stopPool()

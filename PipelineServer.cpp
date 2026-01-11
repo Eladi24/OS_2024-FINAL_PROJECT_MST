@@ -28,13 +28,10 @@ function<void(int)>
 atomic<int> clientNumber(0); 
 mutex graphLock;        
 mutex futureLock; 
-mutex &coutLock =ActiveObject::getOutputMutex();
-
 atomic<bool>terminateFlag(false);
-set<int> connectedClients;
-mutex clientsMutex;
 map<int, pthread_t> clientThreadsMap;  // Map socket -> thread ID
 mutex threadsMapMutex; 
+mutex &coutLock =ActiveObject::getOutputMutex();
 
 /**
  * @struct functArgs
@@ -277,14 +274,13 @@ bool waitAndSendResponse(int clientSock, string& future, atomic<bool>& done,
                          condition_variable& cv) {
   // Acquire lock to wait for pipeline completion
   unique_lock<mutex> guard(futureLock);
-  
   while (!done.load(memory_order_acquire)) {
     cv.wait(guard);
   }
   
   {
-    unique_lock<mutex> clientGuard(clientsMutex);
-    if (connectedClients.find(clientSock) == connectedClients.end()) {
+    unique_lock<mutex> clientGuard(threadsMapMutex);
+    if (clientThreadsMap.find(clientSock) == clientThreadsMap.end()) {
       ServerLogger::logInfo("Client " + to_string(clientSock) + 
                             " disconnected during operation. Response discarded.", coutLock);
       done.store(false, memory_order_release);
@@ -318,7 +314,6 @@ bool waitAndSendResponse(int clientSock, string& future, atomic<bool>& done,
 void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
                     unique_ptr<Graph> &g, MSTFactory &factory,
                     unique_ptr<Tree> &mst) {
-  // Send welcome message when client first connects
   ServerLogger::sendWelcomeMessage(clientSock, [](int sock, const string& msg) {
     ServerConnection::sendResponse(sock, msg, coutLock);
   });
@@ -333,18 +328,13 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
     int bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
     if (bytesReceived <= 0) {
       int remainingSlots;
-      {
-        unique_lock<mutex> guard(clientsMutex);
-        connectedClients.erase(clientSock);
-        remainingSlots = MAX_CLIENTS - connectedClients.size();
-      }
-      
       clientNumber.store(clientNumber.load(memory_order_acquire) - 1,
                          memory_order_release);
       
       {
         unique_lock<mutex> guard(threadsMapMutex);
         clientThreadsMap.erase(clientSock);
+        remainingSlots = MAX_CLIENTS - clientThreadsMap.size();
       }
       
       if (bytesReceived == 0) {
@@ -564,14 +554,9 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
       
       int remainingSlots;
       {
-        unique_lock<mutex> guard(clientsMutex);
-        connectedClients.erase(clientSock);
-        remainingSlots = MAX_CLIENTS - connectedClients.size();
-      }
-      
-      {
         unique_lock<mutex> guard(threadsMapMutex);
         clientThreadsMap.erase(clientSock);
+        remainingSlots = MAX_CLIENTS - clientThreadsMap.size();
       }
       
       clientNumber.store(clientNumber.load(memory_order_acquire) - 1,
@@ -589,25 +574,18 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
       continue;
     }
 
-
     if (!waitAndSendResponse(clientSock, future, done, cv)) {
 
       break;
     }
   }
 
-  // Remove client from connected set and thread tracking before closing
+  // Remove client from thread tracking before closing
   int remainingSlots;
-  {
-    unique_lock<mutex> guard(clientsMutex);
-    connectedClients.erase(clientSock);
-    remainingSlots = MAX_CLIENTS - connectedClients.size();
-  }
-  
-  // Remove thread from tracking (thread will exit naturally)
   {
     unique_lock<mutex> guard(threadsMapMutex);
     clientThreadsMap.erase(clientSock);
+    remainingSlots = MAX_CLIENTS - clientThreadsMap.size();
   }
   
   ServerLogger::logInfo("Slot available. " + to_string(remainingSlots) + " connection slot(s) remaining.", coutLock);
@@ -641,29 +619,29 @@ int main() {
     string shutdownMsg =
         "\n🛑 [SERVER] Server is shutting down. Connection will be closed.\n";
     {
-      unique_lock<mutex> guard(clientsMutex);
-      ServerLogger::logCleanup("Closing " + to_string(connectedClients.size()) + " client connection(s)", coutLock);
-      for (int clientSock : connectedClients) {
+      unique_lock<mutex> guard(threadsMapMutex);
+      ServerLogger::logCleanup("Closing " + to_string(clientThreadsMap.size()) + " client connection(s)", coutLock);
+      for (auto& [clientSock, tid] : clientThreadsMap) {
         if (clientSock >= 0) {
           send(clientSock, shutdownMsg.c_str(), shutdownMsg.size(), 0);
           close(clientSock);
           ServerLogger::logClientClosed(clientSock, coutLock);
         }
       }
-      connectedClients.clear();
       clientNumber.store(0, memory_order_release);
     }
 
-    // Wait for threads to finish current operations
-    // Threads are detached, so they'll clean themselves up automatically
+    // Wait for threads to finish and join them
     ServerLogger::logCleanup("Waiting for " + to_string(clientThreadsMap.size()) + " client thread(s) to finish...", coutLock);
-    this_thread::sleep_for(chrono::milliseconds(500));
     
     {
       unique_lock<mutex> guard(threadsMapMutex);
+      for (auto& [clientSock, tid] : clientThreadsMap) {
+        pthread_join(tid, nullptr);
+      }
       clientThreadsMap.clear();
     }
-    ServerLogger::logCleanup("All threads have been notified to exit", coutLock);
+    ServerLogger::logCleanup("All client threads have been joined", coutLock);
     
     ServerLogger::logCleanup("Resetting functArgs", coutLock);
     faPtr.reset();
@@ -713,8 +691,8 @@ int main() {
     inet_ntop(client_addr.sin_family, &client_addr.sin_addr, s, sizeof(s));
 
     {
-      unique_lock<mutex> guard(clientsMutex);
-      if (connectedClients.size() >= MAX_CLIENTS) {
+      unique_lock<mutex> guard(threadsMapMutex);
+      if (clientThreadsMap.size() >= MAX_CLIENTS) {
         string rejectMsg = "Connection rejected: Server has reached maximum capacity (" + 
                           to_string(MAX_CLIENTS) + " clients). Please try again later.\n";
         ServerConnection::sendResponse(newClientSock, rejectMsg, coutLock);
@@ -729,7 +707,6 @@ int main() {
       
       clientNumber.store(clientNumber.load(memory_order_acquire) + 1,
                          memory_order_release);
-      connectedClients.insert(newClientSock);
     }
 
     ServerLogger::logConnect(clientNumber.load(), string(s), newClientSock, coutLock);
@@ -744,9 +721,6 @@ int main() {
       return nullptr;
     };
     pthread_create(&tid, nullptr, threadFunc, faPtr.get());
-    
-    // Make thread detachable so it cleans itself up automatically when it exits
-    pthread_detach(tid);
     
     {
       unique_lock<mutex> guard(threadsMapMutex);

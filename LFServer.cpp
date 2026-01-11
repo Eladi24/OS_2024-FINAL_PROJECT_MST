@@ -27,7 +27,6 @@ const int MAIN_LOOP_SLEEP_MS = 100;
 // Global variables
 function<void(int)>
     signalHandlerLambda;     
-atomic<int> clientNumber(0); 
 mutex graphMutex;            
 mutex &coutLock =LFThreadPool::getOutputMx();  
 set<int> connectedClients;        
@@ -65,7 +64,6 @@ void signalHandler(int signum) {
       }
     }
     connectedClients.clear();
-    clientNumber.store(0, memory_order_release);
   }
 
   ServerLogger::logCleanup("Waiting for threads to finish operations...", coutLock);
@@ -407,8 +405,6 @@ CommandResult handleMST(int clientSock, const string &cmd,
 CommandResult handleExit(int clientSock) {
   sendResponse(clientSock, "Goodbye\n");
   ServerLogger::logDisconnect(clientSock, coutLock);
-  clientNumber.store(clientNumber.load(memory_order_acquire) - 1,
-                     memory_order_release);
   return {false, true, ""}; // break
 }
 
@@ -440,8 +436,6 @@ void handleCommands(int clientSock, unique_ptr<Graph> &g, MSTFactory &factory,
         unique_lock<mutex> guard(clientsMutex);
         connectedClients.erase(clientSock);
       }
-      clientNumber.store(clientNumber.load(memory_order_acquire) - 1,
-                         memory_order_release);
       if (bytesReceived == 0) {
         ServerLogger::logDisconnect(clientSock, coutLock);
         break;
@@ -550,18 +544,17 @@ void acceptConnection(int server_sock, unique_ptr<Graph> &g,
     perror("accept");
     return;
   }
-  clientNumber.store(clientNumber.load(memory_order_acquire) + 1,
-                     memory_order_release);
   char s[INET6_ADDRSTRLEN];
   inet_ntop(client_addr.sin_family, &client_addr.sin_addr, s, sizeof s);
-  ServerLogger::logConnect(clientNumber.load(), string(s), client_sock,
-                           coutLock);
-  ServerLogger::logStatus(clientNumber.load(), coutLock);
   // Add client to connected set
+  size_t clientCount;
   {
     unique_lock<mutex> guard(clientsMutex);
     connectedClients.insert(client_sock);
+    clientCount = connectedClients.size();
   }
+  ServerLogger::logConnect(clientCount, string(s), client_sock, coutLock);
+  ServerLogger::logStatus(clientCount, coutLock);
 
   function<void()> commandHandler = [client_sock, &g, &factory, &mst]() {
     handleCommands(client_sock, g, factory, mst);
