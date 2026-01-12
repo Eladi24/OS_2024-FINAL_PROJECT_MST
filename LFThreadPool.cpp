@@ -32,8 +32,10 @@ LFThreadPool::LFThreadPool(size_t numThreads, Reactor& reactor)
             cout << THREAD_GREEN << "🧵 [THREAD] " << THREAD_RESET 
                  << "Thread #" << (i+1) << " created " << THREAD_CYAN 
                  << "(ID: 0x" << formatThreadId(_followers[i]->getId()) << ")" 
-                 << THREAD_RESET << endl;
+                 << THREAD_RESET << "\n";
         }
+        // Flush outside lock scope to avoid holding iostream locks during potential exit()
+        cout.flush();
     }
    
     promoteNewLeader();

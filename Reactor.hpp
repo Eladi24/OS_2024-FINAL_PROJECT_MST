@@ -9,6 +9,7 @@
 #include <iostream>
 #include <functional>
 #include <map>
+#include <mutex>
 #include <sys/select.h>
 #include <unistd.h>
 #include <sys/socket.h>
@@ -36,6 +37,7 @@ private:
     fd_set _readFds; /**< The file descriptor set for reading. */
     int _maxFd; /**< The maximum file descriptor value. */
     map<int, function<void()>> _handlers; /**< The map of file descriptors and their event handlers. */
+    mutex _reactorMutex; /**< Mutex to protect concurrent access to reactor data structures. */
 
 public:
     /**

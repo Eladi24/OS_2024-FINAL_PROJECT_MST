@@ -1,5 +1,6 @@
 #include "Graph.hpp"
 #include "LFThreadPool.hpp"
+#include "MSTCache.hpp"
 #include "MSTFactory.hpp"
 #include "ServerConnection.hpp"
 #include "ServerLogger.hpp"
@@ -82,6 +83,10 @@ void signalHandler(int signum) {
                                 "✅ [SHUTDOWN] LF Server stopped successfully.",
                             coutLock);
 
+  // Flush all output streams to ensure no iostream locks are held
+  cout.flush();
+  cerr.flush();
+  
   exit(0);
 }
 
@@ -259,6 +264,9 @@ CommandResult handleNewgraph(int clientSock, stringstream &ss,
     g->addEdge(u, v, w);  
   }
 
+  // Graph changed - invalidate cache
+  MSTCacheManager::incrementGraphVersion();
+
   ServerLogger::logGraphCreated(clientSock, n, m, coutLock);
 
   string response = "\nGraph created with " + to_string(n) + " vertices and " +
@@ -304,6 +312,9 @@ return {false, false,
 "Invalid edge. Vertices should be in the range [1, n] and "
 "weight should be non-negative, or edge already exists.\n"};
 }
+
+// Graph changed - invalidate cache
+MSTCacheManager::incrementGraphVersion();
 
 ServerLogger::logEdgeAdded(clientSock, u, v, w, coutLock);
 
@@ -351,6 +362,9 @@ return {false, false,
 to_string(v) + " does not exist.\n"};
 }
 
+// Graph changed - invalidate cache
+MSTCacheManager::incrementGraphVersion();
+
 ServerLogger::logEdgeRemoved(clientSock, u, v, coutLock);
 
 string response =
@@ -375,7 +389,46 @@ CommandResult handleMST(int clientSock, const string &cmd,
     return {false, false, "Graph not initialized.\n"};
   }
 
+  // Check cache first
+  MSTCache* selectedCache = MSTCacheManager::getCache(cmd);
+  bool useCache = false;
+  
+  // Cache values to copy while holding locks
+  string cachedMSTString;
+  long long cachedTotalWeight = -1;
+  long long cachedDiameter = -1;
+  double cachedAverageDistance = -1.0;
+  string cachedShortestPath;
+  
+  if (selectedCache != nullptr) {
+    // IMPORTANT: graphMutex is already held (via guard), read version now to ensure consistency
+    unsigned long long currentVersion = MSTCacheManager::graphVersion.load(memory_order_acquire);
+    unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
+    if (MSTCacheManager::isCacheValid(selectedCache, currentVersion)) {
+      useCache = true;
+      mst = make_unique<Tree>(*selectedCache->cachedMST);
+      // Copy all cached values while holding the lock
+      cachedMSTString = selectedCache->cachedMSTString;
+      cachedTotalWeight = selectedCache->cachedTotalWeight;
+      cachedDiameter = selectedCache->cachedDiameter;
+      cachedAverageDistance = selectedCache->cachedAverageDistance;
+      cachedShortestPath = selectedCache->cachedShortestPath;
+    }
+  }
 
+  if (useCache) {
+    // Use cached data (using local copies, safe after lock release)
+    string response = "MST created using " + cmd + " algorithm. (📦 Using cached data - no computation needed)\n\n";
+    response += cachedMSTString;
+    response += "TOTAL WEIGHT OF THE MST IS: " + to_string(cachedTotalWeight) + "\n\n";
+    response += "THE LONGEST PATH (DIAMETER) OF THE MST IS: " + to_string(cachedDiameter) + "\n\n";
+    response += "AVERAGE DISTANCE OF THE MST IS: " + to_string(cachedAverageDistance) + "\n\n";
+    response += "SHORTEST PATH IS: " + cachedShortestPath + "\n";
+    ServerLogger::logInfo("Client " + to_string(clientSock) + " using cached MST for " + cmd + " algorithm", coutLock);
+    return {false, false, response};
+  }
+
+  // Compute new MST
   mst.reset();
 
   if (cmd == "Prim") {
@@ -389,12 +442,32 @@ CommandResult handleMST(int clientSock, const string &cmd,
   mst = factory.createMST(g);
   ServerLogger::logMSTComputed(clientSock, cmd, coutLock);
 
+  // Compute all metrics
+  string mstString = mst->printMST();
+  long long totalWeight = mst->totalWeight();
+  long long diameter = mst->diameter();
+  double avgDistance = mst->averageDistanceEdges();
+  string shortestPath = mst->shortestPath();
+
+  // Update cache (graphMutex already held, read version now to ensure consistency)
+  if (selectedCache != nullptr) {
+    unsigned long long currentVersion = MSTCacheManager::graphVersion.load(memory_order_acquire);
+    unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
+    selectedCache->cachedMST = make_unique<Tree>(*mst);
+    selectedCache->cachedMSTString = mstString;
+    selectedCache->cachedTotalWeight = totalWeight;
+    selectedCache->cachedDiameter = diameter;
+    selectedCache->cachedAverageDistance = avgDistance;
+    selectedCache->cachedShortestPath = shortestPath;
+    selectedCache->lastComputedVersion.store(currentVersion, memory_order_release);
+  }
+
   string response = "MST created using " + cmd + " algorithm.\n\n";
-  response += mst->printMST();
-  response += "TOTAL WEIGHT OF THE MST IS: " + to_string(mst->totalWeight()) + "\n\n";
-  response += "THE LONGEST PATH (DIAMETER) OF THE MST IS: " + to_string(mst->diameter()) + "\n\n";
-  response += "AVERAGE DISTANCE OF THE MST IS: " + to_string(mst->averageDistanceEdges()) + "\n\n";
-  response += "SHORTEST PATH IS: " + mst->shortestPath() + "\n";
+  response += mstString;
+  response += "TOTAL WEIGHT OF THE MST IS: " + to_string(totalWeight) + "\n\n";
+  response += "THE LONGEST PATH (DIAMETER) OF THE MST IS: " + to_string(diameter) + "\n\n";
+  response += "AVERAGE DISTANCE OF THE MST IS: " + to_string(avgDistance) + "\n\n";
+  response += "SHORTEST PATH IS: " + shortestPath + "\n";
 
   return {false, false, response};
 }

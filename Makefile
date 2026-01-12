@@ -15,11 +15,11 @@ LIB_OBJ = $(LIB_SRC:.cpp=.o)
 # Tree Library target
 LIB_TARGET = libTree.so
 # Pipeline Server source files
-PIP_SRC = PipelineServer.cpp ActiveObject.cpp ServerConnection.cpp ServerLogger.cpp
+PIP_SRC = PipelineServer.cpp ActiveObject.cpp ServerConnection.cpp ServerLogger.cpp MSTCache.cpp
 # Pipeline Server object files
 PIP_OBJ = $(PIP_SRC:.cpp=.o)
 
-LF_SRC = LFServer.cpp LFThreadPool.cpp Reactor.cpp ThreadContext.cpp ServerLogger.cpp ServerConnection.cpp
+LF_SRC = LFServer.cpp LFThreadPool.cpp Reactor.cpp ThreadContext.cpp ServerLogger.cpp ServerConnection.cpp MSTCache.cpp
 LF_OBJ = $(LF_SRC:.cpp=.o)
 
 # Compile

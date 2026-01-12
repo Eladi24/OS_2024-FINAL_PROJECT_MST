@@ -1,5 +1,6 @@
 #include "ActiveObject.hpp"
 #include "Graph.hpp"
+#include "MSTCache.hpp"
 #include "MSTFactory.hpp"
 #include "ServerConnection.hpp"
 #include "ServerLogger.hpp"
@@ -76,95 +77,69 @@ void signalHandler(int signum) {
 
 
 /**
- * @brief Validates and parses Newgraph command input (SERVER responsibility)
+ * @brief Reads all data for Newgraph command (data collection only, no validation)
  * 
- * Handles all input validation in one place:
- * - Parse n, m from stringstream
- * - Validate n > 0, m >= 0
- * - Validate maxEdges constraint
- * - Read all edges with validation
+ * Reads all packets needed for Newgraph command. Validation happens in stage 0.
+ * This function only collects data by reading from socket until we have complete input.
  *
  * @param clientSock Client socket (for reading additional packets)
- * @param ss Stringstream with initial command data
- * @param ssLock Mutex for stringstream
+ * @param initialCommand Initial command string from first packet
  * @param buffer Buffer for receiving data
- * @param bytesReceived Reference to bytes received
- * @param n Output: Number of vertices
- * @param m Output: Number of edges
- * @param edges Output: Vector of edges (u, v, w)
- * @param errorMsg Output: Error message if validation fails
- * @return true if all validation passes, false otherwise
+ * @return Complete input string with all data, or empty string on error
  */
-bool validateAndReadNewgraph(int clientSock, stringstream& ss, mutex& ssLock,
-                              char* buffer, int& bytesReceived,
-                              int& n, int& m, vector<tuple<int, int, int>>& edges,
-                              string& errorMsg) {
-  // Step 1: Parse n, m
-  {
-    unique_lock<mutex> guard(ssLock);
-    if (!(ss >> n >> m)) {
-      errorMsg = "Invalid graph input. Please enter 2 integers for n and m.\n";
-      return false;
+string readAllNewgraphData(int clientSock, const string& initialCommand, char* buffer) {
+  string fullInput = initialCommand;
+  stringstream ss(initialCommand);
+  string cmd;
+  ss >> cmd; // skip command name
+  
+  int n, m;
+  
+  // Try to parse n, m from initial command
+  if (!(ss >> n >> m)) {
+    // Need more data - read next packet
+    memset(buffer, 0, BUFFER_SIZE);
+    int bytesReceived = recv(clientSock, buffer, BUFFER_SIZE, 0);
+    if (bytesReceived <= 0) {
+      return ""; // Connection error
+    }
+    buffer[bytesReceived] = '\0';
+    fullInput += " " + string(buffer);
+    ss.str(fullInput);
+    ss.clear();
+    ss >> cmd >> n >> m;
+    if (ss.fail()) {
+      return fullInput; // Return what we have, let stage 0 handle validation error
     }
   }
   
-  // Step 2: Validate n > 0, m >= 0
-  if (n <= 0 || m < 0) {
-    errorMsg = "Invalid graph input. n must be > 0 and m must be >= 0.\n";
-    return false;
-  }
-  
-  // Step 3: Validate maxEdges constraint
-  int maxEdges = (n * (n - 1)) / 2;
-  if (m > maxEdges) {
-    errorMsg = "Invalid graph parameters: A graph with " + to_string(n) +
-               " vertices can have at most " + to_string(maxEdges) +
-               " edges, but " + to_string(m) + " edges were requested.\n";
-    return false;
-  }
-  
-  // Step 4: Read and validate all edges
-  edges.clear();
-  for (int i = 0; i < m; i++) {
-    int u = 0, v = 0, w = 0;
-    
-    // Parse edge from stringstream (handle multi-packet)
-    {
-      unique_lock<mutex> guard(ssLock);
-      if (!(ss >> u >> v >> w)) {
-        // Need more data - read next packet
-        ss.clear();
-        ss.str("");
-        memset(buffer, 0, 1024);
-        bytesReceived = recv(clientSock, buffer, BUFFER_SIZE, 0);
-        
-        if (bytesReceived <= 0) {
-          errorMsg = "Error reading edges. Connection closed or error occurred.\n";
-          return false;
-        }
-        
-        ss.write(buffer, bytesReceived);
-        if (!(ss >> u >> v >> w)) {
-          // Invalid format - abort Newgraph command, client must start fresh
-          errorMsg = "Invalid input format. Expected " + to_string(m) + 
-                     " edges (format: u v w), but received invalid data at edge " + 
-                     to_string(i + 1) + ". Newgraph command aborted. Please start with a new command.\n";
-          return false;
-        }
+  // Successfully parsed n and m, now read all edges (may require more packets)
+  while (true) {
+    stringstream testSs(fullInput);
+    string testCmd;
+    int testN, testM;
+    testSs >> testCmd >> testN >> testM;
+    bool allEdgesRead = true;
+    for (int i = 0; i < testM; i++) {
+      int u, v, w;
+      if (!(testSs >> u >> v >> w)) {
+        allEdgesRead = false;
+        break;
       }
     }
+    if (allEdgesRead) break;
     
-    // Validate edge values
-    if (u < 0 || u > n || v < 0 || v > n || w < 0 || u == v) {
-      errorMsg = "Invalid edge values. Vertices should be in the range [1, n] "
-                 "and weight should be non-negative.\n";
-      return false;
+    // Need more data
+    memset(buffer, 0, BUFFER_SIZE);
+    int bytesReceived = recv(clientSock, buffer, BUFFER_SIZE, 0);
+    if (bytesReceived <= 0) {
+      return fullInput; // Return what we have, let stage 0 handle error
     }
-    
-    edges.push_back({u, v, w});
+    buffer[bytesReceived] = '\0';
+    fullInput += " " + string(buffer);
   }
   
-  return true;  // All validation passed
+  return fullInput;
 }
 
 /**
@@ -250,6 +225,7 @@ inline void resetGraphAndMST(unique_ptr<Graph>& g, unique_ptr<Tree>& mst) {
   }
 }
 
+
 /**
  * @brief Helper function: Wait for ActiveObject task completion and send response
  * 
@@ -274,8 +250,17 @@ bool waitAndSendResponse(int clientSock, string& future, atomic<bool>& done,
                          condition_variable& cv) {
   // Acquire lock to wait for pipeline completion
   unique_lock<mutex> guard(futureLock);
-  while (!done.load(memory_order_acquire)) {
-    cv.wait(guard);
+  
+  // Wait with predicate: exit when done is set OR terminateFlag is set (shutdown)
+  cv.wait(guard, [&done]() {
+    return done.load(memory_order_acquire) || terminateFlag.load(memory_order_acquire);
+  });
+  
+  // Check if shutdown was requested
+  if (terminateFlag.load(memory_order_acquire)) {
+    done.store(false, memory_order_release);
+    future.clear();
+    return false;
   }
   
   {
@@ -323,10 +308,14 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
   atomic<bool> done(false);
   char buffer[BUFFER_SIZE] = {0};
 
-  while (!terminateFlag.load()) {
+  while (!terminateFlag.load(memory_order_acquire)) {
+    // Note: recv() is blocking, but when server shuts down and closes socket via
+    // shutdown(clientSock, SHUT_RDWR), recv() will immediately return with error.
+    // terminateFlag is checked at the top of the loop.
     memset(buffer, 0, sizeof(buffer));
     int bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
     if (bytesReceived <= 0) {
+      bool isShutdown = terminateFlag.load(memory_order_acquire);
       int remainingSlots;
       clientNumber.store(clientNumber.load(memory_order_acquire) - 1,
                          memory_order_release);
@@ -337,15 +326,18 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
         remainingSlots = MAX_CLIENTS - clientThreadsMap.size();
       }
       
-      if (bytesReceived == 0) {
-        ServerLogger::logDisconnect(clientSock, coutLock);
-        ServerLogger::logStatus(clientNumber.load(), coutLock);
-        ServerLogger::logInfo("Slot available. " + to_string(remainingSlots) + " connection slot(s) remaining.", coutLock);
-        break;
-      } else {
-        ServerLogger::logError("recv() failed for client " + to_string(clientSock), coutLock);
-        ServerLogger::logInfo("Slot available. " + to_string(remainingSlots) + " connection slot(s) remaining.", coutLock);
+      // Only log disconnect messages if not shutting down (quiet shutdown)
+      if (!isShutdown) {
+        if (bytesReceived == 0) {
+          ServerLogger::logDisconnect(clientSock, coutLock);
+          ServerLogger::logStatus(clientNumber.load(), coutLock);
+          ServerLogger::logInfo("Slot available. " + to_string(remainingSlots) + " connection slot(s) remaining.", coutLock);
+        } else {
+          ServerLogger::logError("recv() failed for client " + to_string(clientSock), coutLock);
+          ServerLogger::logInfo("Slot available. " + to_string(remainingSlots) + " connection slot(s) remaining.", coutLock);
+        }
       }
+      break;
     }
     buffer[bytesReceived] = '\0';
     string command(buffer);
@@ -363,126 +355,187 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
 
     if (cmd == "Newgraph") {
 
-      int n, m;
-      vector<tuple<int, int, int>> edges;
-      string errorMsg;
+      string fullInput = readAllNewgraphData(clientSock, command, buffer);
+      if (fullInput.empty()) {
 
-      if (!validateAndReadNewgraph(clientSock, ss, ssLock, buffer, bytesReceived,
-                                    n, m, edges, errorMsg)) {
-
-        ServerConnection::sendResponse(clientSock, errorMsg, coutLock);
         continue;
       }
-
-      pipeline[0]->enqueue([&g, &mst, edges, n, m, &future, &done, &cv, clientSock]() {
-
-        {
-          unique_lock<mutex> graphGuard(graphLock);
-          
-          resetGraphAndMST(g, mst);
-
-          g = make_unique<Graph>(n, m);
-
-          for (const auto& [u, v, w] : edges) {
-            g->addEdge(u, v, w);  
-          }
-
-          setResponseAndSignal("\nGraph created with " + to_string(n) + " vertices and " +
-                               to_string(m) + " edges.\n", future, done, cv);
+      pipeline[0]->enqueue([&g, &mst, fullInput, &future, &done, &cv, &pipeline, clientSock]() {
+        stringstream ss(fullInput);
+        string cmd;
+        ss >> cmd; // 
+        
+        int n, m;
+        if (!(ss >> n >> m)) {
+          setResponseAndSignal("Invalid graph input. Please enter 2 integers for n and m.\n",
+                              future, done, cv);
+          return;
         }
         
-        ServerLogger::logGraphCreated(clientSock, n, m, coutLock);
+        // Validate n > 0, m >= 0
+        if (n <= 0 || m < 0) {
+          setResponseAndSignal("Invalid graph input. n must be > 0 and m must be >= 0.\n",
+                              future, done, cv);
+          return;
+        }
+        
+        // Validate maxEdges constraint
+        int maxEdges = (n * (n - 1)) / 2;
+        if (m > maxEdges) {
+          setResponseAndSignal("Invalid graph parameters: A graph with " + to_string(n) +
+                              " vertices can have at most " + to_string(maxEdges) +
+                              " edges, but " + to_string(m) + " edges were requested.\n",
+                              future, done, cv);
+          return;
+        }
+        
+        // Read and validate all edges
+        vector<tuple<int, int, int>> edges;
+        for (int i = 0; i < m; i++) {
+          int u, v, w;
+          if (!(ss >> u >> v >> w)) {
+            setResponseAndSignal("Invalid input format. Expected " + to_string(m) + 
+                               " edges (format: u v w), but received invalid data at edge " + 
+                               to_string(i + 1) + ". Newgraph command aborted. Please start with a new command.\n",
+                               future, done, cv);
+            return;
+          }
+          
+          // Validate edge values
+          if (u < 1 || u > n || v < 1 || v > n || w < 0 || u == v) {
+            setResponseAndSignal("Invalid edge values. Vertices should be in the range [1, n] "
+                               "and weight should be non-negative.\n",
+                               future, done, cv);
+            return;
+          }
+          
+          edges.push_back({u, v, w});
+        }
+        
+        // Validation passed - pass to stage 1 to create graph
+        pipeline[1]->enqueue([&g, &mst, n, m, edges, &future, &done, &cv, clientSock]() {
+          {
+            unique_lock<mutex> graphGuard(graphLock);
+            resetGraphAndMST(g, mst);
+            g = make_unique<Graph>(n, m);
+            for (const auto& [u, v, w] : edges) {
+              g->addEdge(u, v, w);
+            }
+          }
+          MSTCacheManager::incrementGraphVersion();
+          setResponseAndSignal("\nGraph created with " + to_string(n) + " vertices and " +
+                              to_string(m) + " edges.\n", future, done, cv);
+          ServerLogger::logGraphCreated(clientSock, n, m, coutLock);
+        });
       });
 
     } else if (cmd == "AddEdge") {
-      int u = 0, v = 0, w = 0;
-      if (!(ss >> u >> v >> w)) {
-
-        ServerConnection::sendResponse(clientSock,
-                                       "Invalid ADD_EDGE input. Please provide "
-                                       "integers for u, v, and w.\n",
-                                       coutLock);
-        continue;
-      }
-
-      pipeline[0]->enqueue([&g, u, v, w, &future, &done, &cv, clientSock]() {
-
-        bool success;
+      // Pass command string to stage 0 for validation
+      pipeline[0]->enqueue([&g, command, &future, &done, &cv, &pipeline, clientSock]() {
+        stringstream ss(command);
+        string cmd;
+        ss >> cmd; // skip command name
+        
+        int u = 0, v = 0, w = 0;
+        if (!(ss >> u >> v >> w)) {
+          setResponseAndSignal("Invalid ADD_EDGE input. Please provide "
+                              "integers for u, v, and w.\n",
+                              future, done, cv);
+          return;
+        }
+        
+        // Validate graph exists
         {
           unique_lock<mutex> graphGuard(graphLock);
-
           if (!isGraphValid(g)) {
             setResponseAndSignal("Graph not initialized.\n", future, done, cv);
             return;
           }
-          
-          success = g->addEdge(u, v, w);
         }
         
-        if (!success) {
-          setResponseAndSignal("Invalid edge. Vertices should be in the range [1, n] and "
-                               "weight should be non-negative, or edge already exists.\n",
-                               future, done, cv);
-        } else {
-          setResponseAndSignal("Edge added between vertices " + to_string(u) + " and " +
-                               to_string(v) + " with weight " + to_string(w) + ".\n",
-                               future, done, cv);
-          // Log after lock is released
-          ServerLogger::logEdgeAdded(clientSock, u, v, w, coutLock);
-        }
+        // Validation passed - pass to stage 1 to add edge
+        pipeline[1]->enqueue([&g, u, v, w, &future, &done, &cv, clientSock]() {
+          bool success;
+          {
+            unique_lock<mutex> graphGuard(graphLock);
+            success = g->addEdge(u, v, w);
+          }
+          // Release graphLock before calling incrementGraphVersion (which acquires cacheLock)
+          if (success) {
+            // Graph changed - increment version and invalidate both caches
+            MSTCacheManager::incrementGraphVersion();
+          }
+          
+          if (!success) {
+            setResponseAndSignal("Invalid edge. Vertices should be in the range [1, n] and "
+                                "weight should be non-negative, or edge already exists.\n",
+                                future, done, cv);
+          } else {
+            setResponseAndSignal("Edge added between vertices " + to_string(u) + " and " +
+                                to_string(v) + " with weight " + to_string(w) + ".\n",
+                                future, done, cv);
+            ServerLogger::logEdgeAdded(clientSock, u, v, w, coutLock);
+          }
+        });
       });
-    }
 
-    else if (cmd == "RemoveEdge") {
-
-      int u = 0, v = 0;
-      if (!(ss >> u >> v)) {
-
-        ServerConnection::sendResponse(
-            clientSock,
-            "Invalid REMOVE_EDGE input. Please provide "
-            "integers for u and v.\n",
-            coutLock);
-        continue;
-      }
-
-      pipeline[0]->enqueue([&g, u, v, &future, &done, &cv, clientSock]() {
-
-        bool success;
+    } else if (cmd == "RemoveEdge") {
+      // Pass command string to stage 0 for validation
+      pipeline[0]->enqueue([&g, command, &future, &done, &cv, &pipeline, clientSock]() {
+        stringstream ss(command);
+        string cmd;
+        ss >> cmd; // skip command name
+        
+        int u = 0, v = 0;
+        if (!(ss >> u >> v)) {
+          setResponseAndSignal("Invalid REMOVE_EDGE input. Please provide "
+                              "integers for u and v.\n",
+                              future, done, cv);
+          return;
+        }
+        
+        // Validate graph exists
         {
           unique_lock<mutex> graphGuard(graphLock);
-
           if (!isGraphValid(g)) {
             setResponseAndSignal("Graph not initialized.\n", future, done, cv);
             return;
           }
-          
-          success = g->removeEdge(u, v);
         }
         
-        if (!success) {
-          setResponseAndSignal("Edge between vertices " + to_string(u) + " and " +
-                               to_string(v) + " does not exist.\n", future, done, cv);
-        } else {
-          setResponseAndSignal("Edge removed between vertices " + to_string(u) + " and " +
-                               to_string(v) + ".\n", future, done, cv);
-
-          // Log after lock is released
-          ServerLogger::logEdgeRemoved(clientSock, u, v, coutLock);
-        }
+        // Validation passed - pass to stage 1 to remove edge
+        pipeline[1]->enqueue([&g, u, v, &future, &done, &cv, clientSock]() {
+          bool success;
+          {
+            unique_lock<mutex> graphGuard(graphLock);
+            success = g->removeEdge(u, v);
+          }
+          // Release graphLock before calling incrementGraphVersion (which acquires cacheLock)
+          if (success) {
+            // Graph changed - increment version and invalidate both caches
+            MSTCacheManager::incrementGraphVersion();
+          }
+          
+          if (!success) {
+            setResponseAndSignal("Edge between vertices " + to_string(u) + " and " +
+                                to_string(v) + " does not exist.\n", future, done, cv);
+          } else {
+            setResponseAndSignal("Edge removed between vertices " + to_string(u) + " and " +
+                                to_string(v) + ".\n", future, done, cv);
+            ServerLogger::logEdgeRemoved(clientSock, u, v, coutLock);
+          }
+        });
       });
-    }
 
-    else if (cmd == "Prim" || cmd == "Kruskal") {
-
-      pipeline[1]->enqueue([&g, cmd, &factory, &mst, &future, &done, &cv,
+    } else if (cmd == "Prim" || cmd == "Kruskal") {
+      // Pass command string to stage 0 for validation
+      pipeline[0]->enqueue([&g, cmd, &factory, &mst, &future, &done, &cv,
                             &pipeline, clientSock]() {
-
+        // Validate graph exists and is valid
         unique_lock<mutex> graphGuard(graphLock, try_to_lock);
         if (!graphGuard.owns_lock()) {
-
           setResponseAndSignal("Graph is being used by another thread. Cannot search for "
-                               "MST using " + cmd + ".\n", future, done, cv);
+                              "MST using " + cmd + ".\n", future, done, cv);
           return;
         }
         
@@ -490,67 +543,166 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
           setResponseAndSignal("Graph not initialized.\n", future, done, cv);
           return;
         }
-
+        
+        // Validation passed - reset MST and set strategy, then continue to stage 1
         if (mst != nullptr) {
           mst.reset();
           mst = nullptr;
         }
-
+        
         if (cmd == "Prim") {
           factory.setStrategy(new PrimStrategy);
-
         } else if (cmd == "Kruskal") {
           factory.setStrategy(new KruskalStrategy);
         } else {
           setResponseAndSignal("Invalid command: " + cmd + "\n", future, done, cv);
           return;
         }
-        pipeline[2]->enqueue([&g, &factory, &mst, &future, &done, &cv,
+        
+        pipeline[1]->enqueue([&g, &factory, &mst, &future, &done, &cv,
                               &pipeline, cmd, clientSock]() {
-          {
-            unique_lock<mutex> graphGuard(graphLock);
-            mst = factory.createMST(g);
-            appendToResponse("MST created using " + cmd + " algorithm.\n", future);
-            appendToResponse(mst->printMST(), future);
-          }
-          ServerLogger::logMSTComputed(clientSock, cmd, coutLock);
-
-          pipeline[3]->enqueue([&mst, &future, &done, &cv, &pipeline]() {
-            {
-              unique_lock<mutex> graphGuard(graphLock);
-              appendToResponse("TOTAL WEIGHT OF THE MST IS: ", future);
-              appendToResponse(to_string(mst->totalWeight()) + "\n\n", future);
+          pipeline[2]->enqueue([&g, &factory, &mst, &future, &done, &cv,
+                                &pipeline, cmd, clientSock]() {
+            MSTCache* selectedCache = MSTCacheManager::getCache(cmd);
+            bool useCache = false;
+            
+            if (selectedCache != nullptr) {
+              {
+                // IMPORTANT: Acquire graphLock first, then read version to ensure consistency
+                unique_lock<mutex> graphGuard(graphLock);
+                unsigned long long currentVersion = MSTCacheManager::graphVersion.load(memory_order_acquire);
+                unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
+                if (MSTCacheManager::isCacheValid(selectedCache, currentVersion)) {
+                  useCache = true;
+                  mst = make_unique<Tree>(*selectedCache->cachedMST);
+                }
+              }
             }
-            pipeline[4]->enqueue([&mst, &future, &done, &cv, &pipeline]() {
+            
+            if (useCache) {
+              // Use cached values - just append cached MST string
+              appendToResponse("MST created using " + cmd + " algorithm. (📦 Using cached data - no computation needed)\n", future);
+              appendToResponse(selectedCache->cachedMSTString, future);
+              ServerLogger::logInfo("Client " + to_string(clientSock) + " using cached MST for " + cmd + " algorithm", coutLock);
+            } else {
+            
+              {
+                unique_lock<mutex> graphGuard(graphLock);
+                // Read version AFTER acquiring graphLock to ensure we have the correct version
+                unsigned long long currentVersion = MSTCacheManager::graphVersion.load(memory_order_acquire);
+                mst = factory.createMST(g);
+                appendToResponse("MST created using " + cmd + " algorithm.\n", future);
+                string mstString = mst->printMST();
+                appendToResponse(mstString, future);
+                
+
+                if (selectedCache != nullptr) {
+                  unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
+                  selectedCache->cachedMST = make_unique<Tree>(*mst);
+                  selectedCache->cachedMSTString = mstString;
+                  selectedCache->lastComputedVersion.store(currentVersion, memory_order_release);
+                  selectedCache->cachedTotalWeight = -1;
+                  selectedCache->cachedDiameter = -1;
+                  selectedCache->cachedAverageDistance = -1.0;
+                  selectedCache->cachedShortestPath.clear();
+                }
+              }
+              ServerLogger::logMSTComputed(clientSock, cmd, coutLock);
+            }
+
+            pipeline[3]->enqueue([&mst, useCache, selectedCache, &future, &done, &cv, &pipeline]() {
+              if (useCache) {
+                appendToResponse("TOTAL WEIGHT OF THE MST IS: ", future);
+                appendToResponse(to_string(selectedCache->cachedTotalWeight) + "\n\n", future);
+              } else {
+
                 {
                   unique_lock<mutex> graphGuard(graphLock);
+                  long long weight = mst->totalWeight();
+                  appendToResponse("TOTAL WEIGHT OF THE MST IS: ", future);
+                  appendToResponse(to_string(weight) + "\n\n", future);
+                  // Update cache
+                  if (selectedCache != nullptr) {
+                    unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
+                    selectedCache->cachedTotalWeight = weight;
+                  }
+                }
+              }
+             
+              pipeline[4]->enqueue([&mst, useCache, selectedCache, &future, &done, &cv, &pipeline]() {
+                if (useCache) {
+                  // Use cached value
                   appendToResponse("THE LONGEST PATH (DIAMETER) OF THE MST IS: ", future);
-                  appendToResponse(to_string(mst->diameter()) + "\n\n", future);
-                  pipeline[5]->enqueue([&mst, &future, &done, &cv,
-                                        &pipeline]() {
+                  appendToResponse(to_string(selectedCache->cachedDiameter) + "\n\n", future);
+                } else {
+                  
+                  {
+                    unique_lock<mutex> graphGuard(graphLock);
+                    long long diameter = mst->diameter();
+                    appendToResponse("THE LONGEST PATH (DIAMETER) OF THE MST IS: ", future);
+                    appendToResponse(to_string(diameter) + "\n\n", future);
+                    // Update cache
+                    {
+                      unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
+                      selectedCache->cachedDiameter = diameter;
+                    }
+                  }
+                }
+                
+                pipeline[5]->enqueue([&mst, useCache, selectedCache, &future, &done, &cv, &pipeline]() {
+                  if (useCache) {
+                    
+                    appendToResponse("AVERAGE DISTANCE OF THE MST IS: ", future);
+                    appendToResponse(to_string(selectedCache->cachedAverageDistance) + "\n\n", future);
+                  } else {
+                  
                     {
                       unique_lock<mutex> graphGuard(graphLock);
+                      double avgDist = mst->averageDistanceEdges();
                       appendToResponse("AVERAGE DISTANCE OF THE MST IS: ", future);
-                      appendToResponse(to_string(mst->averageDistanceEdges()) + "\n\n", future);
-                      pipeline[6]->enqueue([&mst, &future, &done, &cv]() {
-                        {
-                          unique_lock<mutex> graphGuard(graphLock);
-                          appendToResponse("SHORTEST PATH IS: ", future);
-                          appendToResponse(mst->shortestPath() + "\n", future);
-                        }
-
-                        signalCompletion(future, done, cv);
-                      });
+                      appendToResponse(to_string(avgDist) + "\n\n", future);
+                      
+                      {
+                        unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
+                        selectedCache->cachedAverageDistance = avgDist;
+                      }
                     }
+                  }
+                  
+                  pipeline[6]->enqueue([&mst, useCache, selectedCache, &future, &done, &cv]() {
+                    if (useCache) {
+                      
+                      appendToResponse("SHORTEST PATH IS: ", future);
+                      appendToResponse(selectedCache->cachedShortestPath, future);
+                    } else {
+                      
+                      {
+                        unique_lock<mutex> graphGuard(graphLock);
+                        string shortestPath = mst->shortestPath();
+                        appendToResponse("SHORTEST PATH IS: ", future);
+                        appendToResponse(shortestPath + "\n", future);
+                      
+                        {
+                          unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
+                          selectedCache->cachedShortestPath = shortestPath;
+                        }
+                      }
+                    }
+                    signalCompletion(future, done, cv);
                   });
-                }
+                });
               });
+            });
           });
-        });
-      });
+        }); 
+      });  
     } else if (cmd == "Exit") {
+      bool isShutdown = terminateFlag.load(memory_order_acquire);
       ServerConnection::sendResponse(clientSock, "Goodbye\n", coutLock);
-      ServerLogger::logDisconnect(clientSock, coutLock);
+      
+      if (!isShutdown) {
+        ServerLogger::logDisconnect(clientSock, coutLock);
+      }
       
       int remainingSlots;
       {
@@ -561,8 +713,11 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
       
       clientNumber.store(clientNumber.load(memory_order_acquire) - 1,
                          memory_order_release);
-      ServerLogger::logStatus(clientNumber.load(), coutLock);
-      ServerLogger::logInfo("Slot available. " + to_string(remainingSlots) + " connection slot(s) remaining.", coutLock);
+      
+      if (!isShutdown) {
+        ServerLogger::logStatus(clientNumber.load(), coutLock);
+        ServerLogger::logInfo("Slot available. " + to_string(remainingSlots) + " connection slot(s) remaining.", coutLock);
+      }
 
       shutdown(clientSock, SHUT_WR);
       break; 
@@ -581,6 +736,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
   }
 
   // Remove client from thread tracking before closing
+  bool isShutdown = terminateFlag.load(memory_order_acquire);
   int remainingSlots;
   {
     unique_lock<mutex> guard(threadsMapMutex);
@@ -588,7 +744,10 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
     remainingSlots = MAX_CLIENTS - clientThreadsMap.size();
   }
   
-  ServerLogger::logInfo("Slot available. " + to_string(remainingSlots) + " connection slot(s) remaining.", coutLock);
+  // Only log if not shutting down (quiet shutdown)
+  if (!isShutdown) {
+    ServerLogger::logInfo("Slot available. " + to_string(remainingSlots) + " connection slot(s) remaining.", coutLock);
+  }
   shutdown(clientSock, SHUT_RDWR);
   close(clientSock);
   
@@ -613,17 +772,22 @@ int main() {
   MSTFactory factory;
   unique_ptr<Tree> mst;
   unique_ptr<functArgs> faPtr;
+  int serverSock = -1;  // Declare before lambda so it can be captured
 
   signalHandlerLambda = [&](int signum) {
     
     string shutdownMsg =
         "\n🛑 [SERVER] Server is shutting down. Connection will be closed.\n";
+    // Get a copy of client threads and close sockets to wake up blocked threads
+    map<int, pthread_t> threadsToJoin;
     {
       unique_lock<mutex> guard(threadsMapMutex);
       ServerLogger::logCleanup("Closing " + to_string(clientThreadsMap.size()) + " client connection(s)", coutLock);
+      threadsToJoin = clientThreadsMap;  // Copy the map
       for (auto& [clientSock, tid] : clientThreadsMap) {
         if (clientSock >= 0) {
           send(clientSock, shutdownMsg.c_str(), shutdownMsg.size(), 0);
+          shutdown(clientSock, SHUT_RDWR);  // Shutdown socket to wake up recv()
           close(clientSock);
           ServerLogger::logClientClosed(clientSock, coutLock);
         }
@@ -631,14 +795,36 @@ int main() {
       clientNumber.store(0, memory_order_release);
     }
 
+    // Stop pipeline ActiveObjects first (so client threads waiting for pipeline tasks can complete)
+    ServerLogger::logCleanup("Stopping " + to_string(pipeline.size()) + " pipeline ActiveObjects", coutLock);
+    for (auto &obj : pipeline) {
+      obj.reset();
+    }
+    pipeline.clear();
+    ServerLogger::logCleanup("Pipeline ActiveObjects stopped", coutLock);
+    
     // Wait for threads to finish and join them
-    ServerLogger::logCleanup("Waiting for " + to_string(clientThreadsMap.size()) + " client thread(s) to finish...", coutLock);
+    // Threads should exit quickly since sockets are shutdown/closed and terminateFlag is set
+    ServerLogger::logCleanup("Waiting for " + to_string(threadsToJoin.size()) + " client thread(s) to finish...", coutLock);
+    
+    // Give threads a brief moment to detect socket closure and exit
+    this_thread::sleep_for(chrono::milliseconds(100));
+    
+    for (auto& [clientSock, tid] : threadsToJoin) {
+      #ifdef __linux__
+      // Try non-blocking join first (Linux-specific)
+      if (pthread_tryjoin_np(tid, nullptr) != 0) {
+        // Thread still running, do blocking join (should exit quickly after socket shutdown)
+        pthread_join(tid, nullptr);
+      }
+      #else
+      // On other systems, just do blocking join (threads should exit quickly)
+      pthread_join(tid, nullptr);
+      #endif
+    }
     
     {
       unique_lock<mutex> guard(threadsMapMutex);
-      for (auto& [clientSock, tid] : clientThreadsMap) {
-        pthread_join(tid, nullptr);
-      }
       clientThreadsMap.clear();
     }
     ServerLogger::logCleanup("All client threads have been joined", coutLock);
@@ -655,15 +841,16 @@ int main() {
     ServerLogger::logCleanup("Resetting Graph", coutLock);
     g.reset();
     
-    ServerLogger::logCleanup("Resetting " + to_string(pipeline.size()) + " pipeline ActiveObjects", coutLock);
-    for (auto &obj : pipeline) {
-      obj.reset();
+    // Close server socket
+    if (serverSock >= 0) {
+      ServerLogger::logCleanup("Closing server socket", coutLock);
+      close(serverSock);
+      serverSock = -1;
     }
-    pipeline.clear();
 
   };
 
-  int serverSock = ServerConnection::createServerSocket(port);
+  serverSock = ServerConnection::createServerSocket(port);
   if (serverSock < 0) {
     ServerLogger::logError("Failed to create server socket", coutLock);
     exit(1);
@@ -677,7 +864,7 @@ int main() {
   }
   
 
-  while (true) {
+  while (!terminateFlag.load()) {
     // Accept client connection
     struct sockaddr_in client_addr;
     socklen_t sin_size = sizeof(client_addr);
