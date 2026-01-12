@@ -362,7 +362,6 @@ return {false, false,
 to_string(v) + " does not exist.\n"};
 }
 
-// Graph changed - invalidate cache
 MSTCacheManager::incrementGraphVersion();
 
 ServerLogger::logEdgeRemoved(clientSock, u, v, coutLock);
@@ -392,6 +391,7 @@ CommandResult handleMST(int clientSock, const string &cmd,
   // Check cache first
   MSTCache* selectedCache = MSTCacheManager::getCache(cmd);
   bool useCache = false;
+  unsigned long long currentVersion = MSTCacheManager::graphVersion.load(memory_order_acquire);
   
   // Cache values to copy while holding locks
   string cachedMSTString;
@@ -401,13 +401,10 @@ CommandResult handleMST(int clientSock, const string &cmd,
   string cachedShortestPath;
   
   if (selectedCache != nullptr) {
-    // IMPORTANT: graphMutex is already held (via guard), read version now to ensure consistency
-    unsigned long long currentVersion = MSTCacheManager::graphVersion.load(memory_order_acquire);
     unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
     if (MSTCacheManager::isCacheValid(selectedCache, currentVersion)) {
       useCache = true;
       mst = make_unique<Tree>(*selectedCache->cachedMST);
-      // Copy all cached values while holding the lock
       cachedMSTString = selectedCache->cachedMSTString;
       cachedTotalWeight = selectedCache->cachedTotalWeight;
       cachedDiameter = selectedCache->cachedDiameter;
@@ -449,9 +446,8 @@ CommandResult handleMST(int clientSock, const string &cmd,
   double avgDistance = mst->averageDistanceEdges();
   string shortestPath = mst->shortestPath();
 
-  // Update cache (graphMutex already held, read version now to ensure consistency)
+  // Update cache (graphMutex already held, version already read)
   if (selectedCache != nullptr) {
-    unsigned long long currentVersion = MSTCacheManager::graphVersion.load(memory_order_acquire);
     unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
     selectedCache->cachedMST = make_unique<Tree>(*mst);
     selectedCache->cachedMSTString = mstString;

@@ -77,72 +77,6 @@ void signalHandler(int signum) {
 
 
 /**
- * @brief Reads all data for Newgraph command (data collection only, no validation)
- * 
- * Reads all packets needed for Newgraph command. Validation happens in stage 0.
- * This function only collects data by reading from socket until we have complete input.
- *
- * @param clientSock Client socket (for reading additional packets)
- * @param initialCommand Initial command string from first packet
- * @param buffer Buffer for receiving data
- * @return Complete input string with all data, or empty string on error
- */
-string readAllNewgraphData(int clientSock, const string& initialCommand, char* buffer) {
-  string fullInput = initialCommand;
-  stringstream ss(initialCommand);
-  string cmd;
-  ss >> cmd; // skip command name
-  
-  int n, m;
-  
-  // Try to parse n, m from initial command
-  if (!(ss >> n >> m)) {
-    // Need more data - read next packet
-    memset(buffer, 0, BUFFER_SIZE);
-    int bytesReceived = recv(clientSock, buffer, BUFFER_SIZE, 0);
-    if (bytesReceived <= 0) {
-      return ""; // Connection error
-    }
-    buffer[bytesReceived] = '\0';
-    fullInput += " " + string(buffer);
-    ss.str(fullInput);
-    ss.clear();
-    ss >> cmd >> n >> m;
-    if (ss.fail()) {
-      return fullInput; // Return what we have, let stage 0 handle validation error
-    }
-  }
-  
-  // Successfully parsed n and m, now read all edges (may require more packets)
-  while (true) {
-    stringstream testSs(fullInput);
-    string testCmd;
-    int testN, testM;
-    testSs >> testCmd >> testN >> testM;
-    bool allEdgesRead = true;
-    for (int i = 0; i < testM; i++) {
-      int u, v, w;
-      if (!(testSs >> u >> v >> w)) {
-        allEdgesRead = false;
-        break;
-      }
-    }
-    if (allEdgesRead) break;
-    
-    // Need more data
-    memset(buffer, 0, BUFFER_SIZE);
-    int bytesReceived = recv(clientSock, buffer, BUFFER_SIZE, 0);
-    if (bytesReceived <= 0) {
-      return fullInput; // Return what we have, let stage 0 handle error
-    }
-    buffer[bytesReceived] = '\0';
-    fullInput += " " + string(buffer);
-  }
-  
-  return fullInput;
-}
-
-/**
  * @brief Helper function: Set response and signal completion (for ActiveObject tasks)
  * 
  * Encapsulates the common pattern in ActiveObject lambdas:
@@ -309,9 +243,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
   char buffer[BUFFER_SIZE] = {0};
 
   while (!terminateFlag.load(memory_order_acquire)) {
-    // Note: recv() is blocking, but when server shuts down and closes socket via
-    // shutdown(clientSock, SHUT_RDWR), recv() will immediately return with error.
-    // terminateFlag is checked at the top of the loop.
+
     memset(buffer, 0, sizeof(buffer));
     int bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
     if (bytesReceived <= 0) {
@@ -354,14 +286,8 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
     string future;
 
     if (cmd == "Newgraph") {
-
-      string fullInput = readAllNewgraphData(clientSock, command, buffer);
-      if (fullInput.empty()) {
-
-        continue;
-      }
-      pipeline[0]->enqueue([&g, &mst, fullInput, &future, &done, &cv, &pipeline, clientSock]() {
-        stringstream ss(fullInput);
+      pipeline[0]->enqueue([&g, &mst, command, &future, &done, &cv, &pipeline, clientSock]() {
+        stringstream ss(command);
         string cmd;
         ss >> cmd; // 
         
@@ -389,16 +315,55 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
           return;
         }
         
-        // Read and validate all edges
+        // Read and validate all m edges
         vector<tuple<int, int, int>> edges;
+        char buffer[BUFFER_SIZE];
+        string edgeData = "";
+        
+        string temp;
+        while (ss >> temp) {
+          if (!edgeData.empty()) edgeData += " ";
+          edgeData += temp;
+        }
+        
         for (int i = 0; i < m; i++) {
           int u, v, w;
-          if (!(ss >> u >> v >> w)) {
-            setResponseAndSignal("Invalid input format. Expected " + to_string(m) + 
-                               " edges (format: u v w), but received invalid data at edge " + 
-                               to_string(i + 1) + ". Newgraph command aborted. Please start with a new command.\n",
-                               future, done, cv);
-            return;
+          
+          // Try to read edge from current data
+          stringstream edgeStream(edgeData);
+          if (!(edgeStream >> u >> v >> w)) {
+            memset(buffer, 0, BUFFER_SIZE);
+            int bytesReceived = recv(clientSock, buffer, BUFFER_SIZE, 0);
+            if (bytesReceived <= 0) {
+              setResponseAndSignal("Invalid input format. Expected " + to_string(m) + 
+                                 " edges (format: u v w), but connection closed at edge " + 
+                                 to_string(i + 1) + ". Newgraph command aborted. Please start with a new command.\n",
+                                 future, done, cv);
+              return;
+            }
+            buffer[bytesReceived] = '\0';
+            
+            if (!edgeData.empty()) edgeData += " ";
+            edgeData += string(buffer);
+            
+            // Try parsing again with updated data
+            edgeStream.clear();
+            edgeStream.str(edgeData);
+            if (!(edgeStream >> u >> v >> w)) {
+              setResponseAndSignal("Invalid input format. Expected " + to_string(m) + 
+                                 " edges (format: u v w), but received invalid data at edge " + 
+                                 to_string(i + 1) + ". Newgraph command aborted. Please start with a new command.\n",
+                                 future, done, cv);
+              return;
+            }
+          }
+          
+          // Remove parsed edge from edgeData - get remaining tokens after u, v, w
+          edgeData = "";
+          string remaining;
+          while (edgeStream >> remaining) {
+            if (!edgeData.empty()) edgeData += " ";
+            edgeData += remaining;
           }
           
           // Validate edge values
@@ -460,9 +425,8 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
             unique_lock<mutex> graphGuard(graphLock);
             success = g->addEdge(u, v, w);
           }
-          // Release graphLock before calling incrementGraphVersion (which acquires cacheLock)
+    
           if (success) {
-            // Graph changed - increment version and invalidate both caches
             MSTCacheManager::incrementGraphVersion();
           }
           
@@ -480,11 +444,10 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
       });
 
     } else if (cmd == "RemoveEdge") {
-      // Pass command string to stage 0 for validation
       pipeline[0]->enqueue([&g, command, &future, &done, &cv, &pipeline, clientSock]() {
         stringstream ss(command);
         string cmd;
-        ss >> cmd; // skip command name
+        ss >> cmd; 
         
         int u = 0, v = 0;
         if (!(ss >> u >> v)) {
@@ -503,16 +466,13 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
           }
         }
         
-        // Validation passed - pass to stage 1 to remove edge
         pipeline[1]->enqueue([&g, u, v, &future, &done, &cv, clientSock]() {
           bool success;
           {
             unique_lock<mutex> graphGuard(graphLock);
             success = g->removeEdge(u, v);
           }
-          // Release graphLock before calling incrementGraphVersion (which acquires cacheLock)
           if (success) {
-            // Graph changed - increment version and invalidate both caches
             MSTCacheManager::incrementGraphVersion();
           }
           
@@ -528,10 +488,8 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
       });
 
     } else if (cmd == "Prim" || cmd == "Kruskal") {
-      // Pass command string to stage 0 for validation
       pipeline[0]->enqueue([&g, cmd, &factory, &mst, &future, &done, &cv,
                             &pipeline, clientSock]() {
-        // Validate graph exists and is valid
         unique_lock<mutex> graphGuard(graphLock, try_to_lock);
         if (!graphGuard.owns_lock()) {
           setResponseAndSignal("Graph is being used by another thread. Cannot search for "
@@ -544,52 +502,47 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
           return;
         }
         
-        // Validation passed - reset MST and set strategy, then continue to stage 1
-        if (mst != nullptr) {
-          mst.reset();
-          mst = nullptr;
-        }
-        
-        if (cmd == "Prim") {
-          factory.setStrategy(new PrimStrategy);
-        } else if (cmd == "Kruskal") {
-          factory.setStrategy(new KruskalStrategy);
-        } else {
-          setResponseAndSignal("Invalid command: " + cmd + "\n", future, done, cv);
-          return;
-        }
-        
-        pipeline[1]->enqueue([&g, &factory, &mst, &future, &done, &cv,
-                              &pipeline, cmd, clientSock]() {
-          pipeline[2]->enqueue([&g, &factory, &mst, &future, &done, &cv,
-                                &pipeline, cmd, clientSock]() {
-            MSTCache* selectedCache = MSTCacheManager::getCache(cmd);
-            bool useCache = false;
-            
-            if (selectedCache != nullptr) {
-              {
-                // IMPORTANT: Acquire graphLock first, then read version to ensure consistency
-                unique_lock<mutex> graphGuard(graphLock);
-                unsigned long long currentVersion = MSTCacheManager::graphVersion.load(memory_order_acquire);
-                unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
-                if (MSTCacheManager::isCacheValid(selectedCache, currentVersion)) {
-                  useCache = true;
-                  mst = make_unique<Tree>(*selectedCache->cachedMST);
-                }
-              }
+        pipeline[1]->enqueue([&g, cmd, &factory, &mst, &future, &done, &cv,
+                              &pipeline, clientSock]() {
+          // Check cache first - only set factory if cache is invalid
+          MSTCache* selectedCache = MSTCacheManager::getCache(cmd);
+          bool useCache = false;
+          unsigned long long currentVersion = MSTCacheManager::graphVersion.load(memory_order_acquire);
+          
+          if (selectedCache != nullptr) {
+            unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
+            if (MSTCacheManager::isCacheValid(selectedCache, currentVersion)) {
+              useCache = true;
+              mst = make_unique<Tree>(*selectedCache->cachedMST);
+            }
+          }
+          
+          // Only reset MST and set factory strategy if we need to compute new MST
+          if (!useCache) {
+            if (mst != nullptr) {
+              mst.reset();
+              mst = nullptr;
             }
             
+            if (cmd == "Prim") {
+              factory.setStrategy(new PrimStrategy);
+            } else if (cmd == "Kruskal") {
+              factory.setStrategy(new KruskalStrategy);
+            } else {
+              setResponseAndSignal("Invalid command: " + cmd + "\n", future, done, cv);
+              return;
+            }
+          }
+          
+          pipeline[2]->enqueue([&g, &factory, &mst, &future, &done, &cv,
+                                &pipeline, cmd, clientSock, useCache, selectedCache, currentVersion]() {
             if (useCache) {
-              // Use cached values - just append cached MST string
               appendToResponse("MST created using " + cmd + " algorithm. (📦 Using cached data - no computation needed)\n", future);
               appendToResponse(selectedCache->cachedMSTString, future);
               ServerLogger::logInfo("Client " + to_string(clientSock) + " using cached MST for " + cmd + " algorithm", coutLock);
             } else {
-            
               {
                 unique_lock<mutex> graphGuard(graphLock);
-                // Read version AFTER acquiring graphLock to ensure we have the correct version
-                unsigned long long currentVersion = MSTCacheManager::graphVersion.load(memory_order_acquire);
                 mst = factory.createMST(g);
                 appendToResponse("MST created using " + cmd + " algorithm.\n", future);
                 string mstString = mst->printMST();
@@ -621,7 +574,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
                   long long weight = mst->totalWeight();
                   appendToResponse("TOTAL WEIGHT OF THE MST IS: ", future);
                   appendToResponse(to_string(weight) + "\n\n", future);
-                  // Update cache
+          
                   if (selectedCache != nullptr) {
                     unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
                     selectedCache->cachedTotalWeight = weight;
@@ -735,7 +688,6 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
     }
   }
 
-  // Remove client from thread tracking before closing
   bool isShutdown = terminateFlag.load(memory_order_acquire);
   int remainingSlots;
   {
@@ -744,7 +696,6 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
     remainingSlots = MAX_CLIENTS - clientThreadsMap.size();
   }
   
-  // Only log if not shutting down (quiet shutdown)
   if (!isShutdown) {
     ServerLogger::logInfo("Slot available. " + to_string(remainingSlots) + " connection slot(s) remaining.", coutLock);
   }
@@ -795,7 +746,7 @@ int main() {
       clientNumber.store(0, memory_order_release);
     }
 
-    // Stop pipeline ActiveObjects first (so client threads waiting for pipeline tasks can complete)
+    // Stop pipeline ActiveObjects
     ServerLogger::logCleanup("Stopping " + to_string(pipeline.size()) + " pipeline ActiveObjects", coutLock);
     for (auto &obj : pipeline) {
       obj.reset();
@@ -803,24 +754,10 @@ int main() {
     pipeline.clear();
     ServerLogger::logCleanup("Pipeline ActiveObjects stopped", coutLock);
     
-    // Wait for threads to finish and join them
-    // Threads should exit quickly since sockets are shutdown/closed and terminateFlag is set
+    // Wait for client threads to finish
     ServerLogger::logCleanup("Waiting for " + to_string(threadsToJoin.size()) + " client thread(s) to finish...", coutLock);
-    
-    // Give threads a brief moment to detect socket closure and exit
-    this_thread::sleep_for(chrono::milliseconds(100));
-    
     for (auto& [clientSock, tid] : threadsToJoin) {
-      #ifdef __linux__
-      // Try non-blocking join first (Linux-specific)
-      if (pthread_tryjoin_np(tid, nullptr) != 0) {
-        // Thread still running, do blocking join (should exit quickly after socket shutdown)
-        pthread_join(tid, nullptr);
-      }
-      #else
-      // On other systems, just do blocking join (threads should exit quickly)
       pthread_join(tid, nullptr);
-      #endif
     }
     
     {
