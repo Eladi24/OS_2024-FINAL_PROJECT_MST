@@ -404,7 +404,6 @@ CommandResult handleMST(int clientSock, const string &cmd,
     unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
     if (MSTCacheManager::isCacheValid(selectedCache, currentVersion)) {
       useCache = true;
-      mst = make_unique<Tree>(*selectedCache->cachedMST);
       cachedMSTString = selectedCache->cachedMSTString;
       cachedTotalWeight = selectedCache->cachedTotalWeight;
       cachedDiameter = selectedCache->cachedDiameter;
@@ -449,7 +448,6 @@ CommandResult handleMST(int clientSock, const string &cmd,
   // Update cache (graphMutex already held, version already read)
   if (selectedCache != nullptr) {
     unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
-    selectedCache->cachedMST = make_unique<Tree>(*mst);
     selectedCache->cachedMSTString = mstString;
     selectedCache->cachedTotalWeight = totalWeight;
     selectedCache->cachedDiameter = diameter;

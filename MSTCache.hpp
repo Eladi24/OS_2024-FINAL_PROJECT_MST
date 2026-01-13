@@ -1,7 +1,6 @@
 #ifndef MST_CACHE_HPP
 #define MST_CACHE_HPP
 
-#include "Tree.hpp"
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -11,11 +10,10 @@
  * @brief MST Cache structure (separate cache for each algorithm)
  * 
  * Stores cached MST computation results for Prim and Kruskal algorithms.
- * Each cache maintains the MST object and all computed values.
+ * Each cache maintains the MST string representation and all computed values.
  */
 struct MSTCache {
   std::atomic<unsigned long long> lastComputedVersion{0};  // Version when MST was last computed
-  std::unique_ptr<Tree> cachedMST{nullptr};  // Cached MST object
   std::string cachedMSTString{""};  // Cached MST string representation
   long long cachedTotalWeight{-1};  // Cached total weight
   long long cachedDiameter{-1};  // Cached diameter

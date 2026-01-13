@@ -12,7 +12,6 @@ namespace MSTCacheManager {
     std::unique_lock<std::mutex> guard(cacheLock);
     
   
-    primCache.cachedMST.reset();
     primCache.cachedMSTString.clear();
     primCache.cachedTotalWeight = -1;
     primCache.cachedDiameter = -1;
@@ -20,8 +19,7 @@ namespace MSTCacheManager {
     primCache.cachedShortestPath.clear();
     primCache.lastComputedVersion.store(0, std::memory_order_release);
     
-    // Invalidate Kruskal cache
-    kruskalCache.cachedMST.reset();
+
     kruskalCache.cachedMSTString.clear();
     kruskalCache.cachedTotalWeight = -1;
     kruskalCache.cachedDiameter = -1;
@@ -46,7 +44,6 @@ namespace MSTCacheManager {
     
     unsigned long long cachedVersion = cache->lastComputedVersion.load(std::memory_order_acquire);
     return (currentVersion == cachedVersion && 
-            cache->cachedMST != nullptr && 
             cache->cachedTotalWeight >= 0);
   }
   

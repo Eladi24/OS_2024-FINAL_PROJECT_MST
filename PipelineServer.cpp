@@ -19,7 +19,7 @@
 
 // Constants
 const int port = 4050; 
-const int PIPELINE_SIZE = 7;
+const int PIPELINE_SIZE = 6;
 const int BUFFER_SIZE = 1024;
 const int MAX_CLIENTS = 10; 
 
@@ -249,8 +249,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
     if (bytesReceived <= 0) {
       bool isShutdown = terminateFlag.load(memory_order_acquire);
       int remainingSlots;
-      clientNumber.store(clientNumber.load(memory_order_acquire) - 1,
-                         memory_order_release);
+      clientNumber.fetch_sub(1, memory_order_relaxed);
       
       {
         unique_lock<mutex> guard(threadsMapMutex);
@@ -358,7 +357,6 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
             }
           }
           
-          // Remove parsed edge from edgeData - get remaining tokens after u, v, w
           edgeData = "";
           string remaining;
           while (edgeStream >> remaining) {
@@ -377,7 +375,6 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
           edges.push_back({u, v, w});
         }
         
-        // Validation passed - pass to stage 1 to create graph
         pipeline[1]->enqueue([&g, &mst, n, m, edges, &future, &done, &cv, clientSock]() {
           {
             unique_lock<mutex> graphGuard(graphLock);
@@ -395,7 +392,6 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
       });
 
     } else if (cmd == "AddEdge") {
-      // Pass command string to stage 0 for validation
       pipeline[0]->enqueue([&g, command, &future, &done, &cv, &pipeline, clientSock]() {
         stringstream ss(command);
         string cmd;
@@ -490,12 +486,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
     } else if (cmd == "Prim" || cmd == "Kruskal") {
       pipeline[0]->enqueue([&g, cmd, &factory, &mst, &future, &done, &cv,
                             &pipeline, clientSock]() {
-        unique_lock<mutex> graphGuard(graphLock, try_to_lock);
-        if (!graphGuard.owns_lock()) {
-          setResponseAndSignal("Graph is being used by another thread. Cannot search for "
-                              "MST using " + cmd + ".\n", future, done, cv);
-          return;
-        }
+        unique_lock<mutex> graphGuard(graphLock);
         
         if (!isGraphValid(g)) {
           setResponseAndSignal("Graph not initialized.\n", future, done, cv);
@@ -504,21 +495,41 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
         
         pipeline[1]->enqueue([&g, cmd, &factory, &mst, &future, &done, &cv,
                               &pipeline, clientSock]() {
-          // Check cache first - only set factory if cache is invalid
           MSTCache* selectedCache = MSTCacheManager::getCache(cmd);
-          bool useCache = false;
+          
+          unique_lock<mutex> graphGuard(graphLock);
           unsigned long long currentVersion = MSTCacheManager::graphVersion.load(memory_order_acquire);
           
+          // Check cache validity with correct version (graph lock held)
+          bool useCache = false;
           if (selectedCache != nullptr) {
             unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
             if (MSTCacheManager::isCacheValid(selectedCache, currentVersion)) {
               useCache = true;
-              mst = make_unique<Tree>(*selectedCache->cachedMST);
             }
           }
           
-          // Only reset MST and set factory strategy if we need to compute new MST
-          if (!useCache) {
+          // Pre-compute all MST metrics (will be used by stages 3-5)
+          long long totalWeight = -1;
+          long long diameter = -1;
+          double avgDistance = -1.0;
+          string shortestPathStr = "";
+          string mstString = "";
+          
+          if (useCache) {
+            // Use cached values
+            totalWeight = selectedCache->cachedTotalWeight;
+            diameter = selectedCache->cachedDiameter;
+            avgDistance = selectedCache->cachedAverageDistance;
+            shortestPathStr = selectedCache->cachedShortestPath;
+            mstString = selectedCache->cachedMSTString;
+            
+            appendToResponse("MST created using " + cmd + " algorithm. (📦 Using cached data - no computation needed)\n", future);
+            appendToResponse(mstString, future);
+            ServerLogger::logInfo("Client " + to_string(clientSock) + " ✅ CACHE HIT - Using cached MST for " + cmd + " algorithm", coutLock);
+          } else {
+            ServerLogger::logInfo("Client " + to_string(clientSock) + " ❌ CACHE MISS - Computing new MST for " + cmd + " algorithm", coutLock);
+            // Set up factory strategy
             if (mst != nullptr) {
               mst.reset();
               mst = nullptr;
@@ -529,126 +540,63 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
             } else if (cmd == "Kruskal") {
               factory.setStrategy(new KruskalStrategy);
             } else {
+              graphGuard.unlock();
               setResponseAndSignal("Invalid command: " + cmd + "\n", future, done, cv);
               return;
             }
-          }
-          
-          pipeline[2]->enqueue([&g, &factory, &mst, &future, &done, &cv,
-                                &pipeline, cmd, clientSock, useCache, selectedCache, currentVersion]() {
-            if (useCache) {
-              appendToResponse("MST created using " + cmd + " algorithm. (📦 Using cached data - no computation needed)\n", future);
-              appendToResponse(selectedCache->cachedMSTString, future);
-              ServerLogger::logInfo("Client " + to_string(clientSock) + " using cached MST for " + cmd + " algorithm", coutLock);
-            } else {
-              {
-                unique_lock<mutex> graphGuard(graphLock);
-                mst = factory.createMST(g);
-                appendToResponse("MST created using " + cmd + " algorithm.\n", future);
-                string mstString = mst->printMST();
-                appendToResponse(mstString, future);
-                
-
-                if (selectedCache != nullptr) {
-                  unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
-                  selectedCache->cachedMST = make_unique<Tree>(*mst);
-                  selectedCache->cachedMSTString = mstString;
-                  selectedCache->lastComputedVersion.store(currentVersion, memory_order_release);
-                  selectedCache->cachedTotalWeight = -1;
-                  selectedCache->cachedDiameter = -1;
-                  selectedCache->cachedAverageDistance = -1.0;
-                  selectedCache->cachedShortestPath.clear();
-                }
-              }
-              ServerLogger::logMSTComputed(clientSock, cmd, coutLock);
+            
+            // Compute MST and all metrics while lock is held
+            mst = factory.createMST(g);
+            appendToResponse("MST created using " + cmd + " algorithm.\n", future);
+            mstString = mst->printMST();
+            appendToResponse(mstString, future);
+            
+            // Compute all metrics while graph lock is held
+            totalWeight = mst->totalWeight();
+            diameter = mst->diameter();
+            avgDistance = mst->averageDistanceEdges();
+            shortestPathStr = mst->shortestPath();
+            
+            // Update cache with all computed values
+            if (selectedCache != nullptr) {
+              unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
+              selectedCache->cachedMSTString = mstString;
+              selectedCache->lastComputedVersion.store(currentVersion, memory_order_release);
+              selectedCache->cachedTotalWeight = totalWeight;
+              selectedCache->cachedDiameter = diameter;
+              selectedCache->cachedAverageDistance = avgDistance;
+              selectedCache->cachedShortestPath = shortestPathStr;
             }
-
-            pipeline[3]->enqueue([&mst, useCache, selectedCache, &future, &done, &cv, &pipeline]() {
-              if (useCache) {
-                appendToResponse("TOTAL WEIGHT OF THE MST IS: ", future);
-                appendToResponse(to_string(selectedCache->cachedTotalWeight) + "\n\n", future);
-              } else {
-
-                {
-                  unique_lock<mutex> graphGuard(graphLock);
-                  long long weight = mst->totalWeight();
-                  appendToResponse("TOTAL WEIGHT OF THE MST IS: ", future);
-                  appendToResponse(to_string(weight) + "\n\n", future);
-          
-                  if (selectedCache != nullptr) {
-                    unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
-                    selectedCache->cachedTotalWeight = weight;
-                  }
-                }
-              }
+            
+            ServerLogger::logMSTComputed(clientSock, cmd, coutLock);
+          }
+        
+            pipeline[2]->enqueue([totalWeight, diameter, avgDistance, shortestPathStr, &future, &done, &cv, &pipeline]() {
+              // Stage 2: Print total weight (already computed in stage 1)
+              appendToResponse("TOTAL WEIGHT OF THE MST IS: ", future);
+              appendToResponse(to_string(totalWeight) + "\n\n", future);
              
-              pipeline[4]->enqueue([&mst, useCache, selectedCache, &future, &done, &cv, &pipeline]() {
-                if (useCache) {
-                  // Use cached value
-                  appendToResponse("THE LONGEST PATH (DIAMETER) OF THE MST IS: ", future);
-                  appendToResponse(to_string(selectedCache->cachedDiameter) + "\n\n", future);
-                } else {
-                  
-                  {
-                    unique_lock<mutex> graphGuard(graphLock);
-                    long long diameter = mst->diameter();
-                    appendToResponse("THE LONGEST PATH (DIAMETER) OF THE MST IS: ", future);
-                    appendToResponse(to_string(diameter) + "\n\n", future);
-                    // Update cache
-                    {
-                      unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
-                      selectedCache->cachedDiameter = diameter;
-                    }
-                  }
-                }
+              pipeline[3]->enqueue([diameter, avgDistance, shortestPathStr, &future, &done, &cv, &pipeline]() {
+                // Stage 3: Print diameter (already computed in stage 1)
+                appendToResponse("THE LONGEST PATH (DIAMETER) OF THE MST IS: ", future);
+                appendToResponse(to_string(diameter) + "\n\n", future);
                 
-                pipeline[5]->enqueue([&mst, useCache, selectedCache, &future, &done, &cv, &pipeline]() {
-                  if (useCache) {
-                    
-                    appendToResponse("AVERAGE DISTANCE OF THE MST IS: ", future);
-                    appendToResponse(to_string(selectedCache->cachedAverageDistance) + "\n\n", future);
-                  } else {
+                pipeline[4]->enqueue([avgDistance, shortestPathStr, &future, &done, &cv, &pipeline]() {
+                  // Stage 4: Print average distance (already computed in stage 1)
+                  appendToResponse("AVERAGE DISTANCE OF THE MST IS: ", future);
+                  appendToResponse(to_string(avgDistance) + "\n\n", future);
                   
-                    {
-                      unique_lock<mutex> graphGuard(graphLock);
-                      double avgDist = mst->averageDistanceEdges();
-                      appendToResponse("AVERAGE DISTANCE OF THE MST IS: ", future);
-                      appendToResponse(to_string(avgDist) + "\n\n", future);
-                      
-                      {
-                        unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
-                        selectedCache->cachedAverageDistance = avgDist;
-                      }
-                    }
-                  }
-                  
-                  pipeline[6]->enqueue([&mst, useCache, selectedCache, &future, &done, &cv]() {
-                    if (useCache) {
-                      
-                      appendToResponse("SHORTEST PATH IS: ", future);
-                      appendToResponse(selectedCache->cachedShortestPath, future);
-                    } else {
-                      
-                      {
-                        unique_lock<mutex> graphGuard(graphLock);
-                        string shortestPath = mst->shortestPath();
-                        appendToResponse("SHORTEST PATH IS: ", future);
-                        appendToResponse(shortestPath + "\n", future);
-                      
-                        {
-                          unique_lock<mutex> cacheGuard(MSTCacheManager::cacheLock);
-                          selectedCache->cachedShortestPath = shortestPath;
-                        }
-                      }
-                    }
+                  pipeline[5]->enqueue([shortestPathStr, &future, &done, &cv]() {
+                    // Stage 5: Print shortest path (already computed in stage 1)
+                    appendToResponse("SHORTEST PATH IS: ", future);
+                    appendToResponse(shortestPathStr + "\n", future);
                     signalCompletion(future, done, cv);
                   });
                 });
               });
             });
           });
-        }); 
-      });  
+        });
     } else if (cmd == "Exit") {
       bool isShutdown = terminateFlag.load(memory_order_acquire);
       ServerConnection::sendResponse(clientSock, "Goodbye\n", coutLock);
@@ -664,8 +612,7 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
         remainingSlots = MAX_CLIENTS - clientThreadsMap.size();
       }
       
-      clientNumber.store(clientNumber.load(memory_order_acquire) - 1,
-                         memory_order_release);
+      clientNumber.fetch_sub(1, memory_order_relaxed);
       
       if (!isShutdown) {
         ServerLogger::logStatus(clientNumber.load(), coutLock);
@@ -702,7 +649,6 @@ void handleCommands(int clientSock, vector<unique_ptr<ActiveObject>> &pipeline,
   shutdown(clientSock, SHUT_RDWR);
   close(clientSock);
   
-  // Thread will exit naturally here - it's responsible for its own cleanup
 }
 
 
@@ -734,7 +680,7 @@ int main() {
     {
       unique_lock<mutex> guard(threadsMapMutex);
       ServerLogger::logCleanup("Closing " + to_string(clientThreadsMap.size()) + " client connection(s)", coutLock);
-      threadsToJoin = clientThreadsMap;  // Copy the map
+      threadsToJoin = clientThreadsMap; 
       for (auto& [clientSock, tid] : clientThreadsMap) {
         if (clientSock >= 0) {
           send(clientSock, shutdownMsg.c_str(), shutdownMsg.size(), 0);
@@ -829,8 +775,7 @@ int main() {
         continue;
       }
       
-      clientNumber.store(clientNumber.load(memory_order_acquire) + 1,
-                         memory_order_release);
+      clientNumber.fetch_add(1, memory_order_relaxed);
     }
 
     ServerLogger::logConnect(clientNumber.load(), string(s), newClientSock, coutLock);
